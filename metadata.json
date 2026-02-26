@@ -1,0 +1,5 @@
+{
+  "name": "生成不同姿势",
+  "description": "基于 Gemini 2.5 Flash 的智能姿势生成与图像编辑工具",
+  "requestFramePermissions": []
+}
