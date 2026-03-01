@@ -92,7 +92,9 @@ export const generateTryOn = async (
     customApiKey?: string;
     model: string;
     imageSize?: '1K' | '2K' | '4K';
-  }
+  },
+  stockingImageBase64?: string,
+  stockingImageMimeType?: string
 ): Promise<string> => {
   const { useCustomApi, customBaseUrl, customApiKey, model, imageSize } = config;
   
@@ -120,26 +122,38 @@ export const generateTryOn = async (
   }
 
   try {
+    const parts: any[] = [
+      {
+        inlineData: {
+          data: clothingImageBase64,
+          mimeType: clothingImageMimeType,
+        },
+      },
+      {
+        inlineData: {
+          data: modelImageBase64,
+          mimeType: modelImageMimeType,
+        },
+      }
+    ];
+
+    if (stockingImageBase64 && stockingImageMimeType) {
+      parts.push({
+        inlineData: {
+          data: stockingImageBase64,
+          mimeType: stockingImageMimeType,
+        },
+      });
+    }
+
+    parts.push({
+      text: prompt,
+    });
+
     const response = await ai.models.generateContent({
       model: model,
       contents: {
-        parts: [
-          {
-            inlineData: {
-              data: clothingImageBase64,
-              mimeType: clothingImageMimeType,
-            },
-          },
-          {
-            inlineData: {
-              data: modelImageBase64,
-              mimeType: modelImageMimeType,
-            },
-          },
-          {
-            text: prompt,
-          },
-        ],
+        parts: parts,
       },
       config: generationConfig,
     });

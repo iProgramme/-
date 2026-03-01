@@ -77,7 +77,8 @@ const App: React.FC = () => {
   // Try-on State (New Tab)
   const [tryOnModelImage, setTryOnModelImage] = useState<UploadedImage | null>(null);
   const [tryOnClothingImages, setTryOnClothingImages] = useState<UploadedImage[]>([]);
-  const [tryOnResults, setTryOnResults] = useState<{sourceIndex: number, result: GenerationResult}[]>([]);
+  const [tryOnStockingImages, setTryOnStockingImages] = useState<UploadedImage[]>([]);
+  const [tryOnResults, setTryOnResults] = useState<{sourceIndex: number, result: GenerationResult, stockingIndex?: number}[]>([]);
 
   const [selectedPose, setSelectedPose] = useState<PoseType | null>(null);
   const [customPoseInput, setCustomPoseInput] = useState('');
@@ -465,14 +466,30 @@ const App: React.FC = () => {
   const handleTryOnGeneration = async () => {
     if (!tryOnModelImage || tryOnClothingImages.length === 0) return;
 
-    const newResults = tryOnClothingImages.map((_, index) => ({
-      sourceIndex: index,
-      result: {
-        id: `tryon-${Date.now()}-${index}`,
-        poseId: 'tryon',
-        status: 'loading' as const
+    const newResults = tryOnClothingImages.map((_, index) => {
+      // Randomly select a stocking image if available
+      // Logic: If stockings are uploaded, 50% chance to pick one, or pick one randomly from the list + 'none' option?
+      // User requirement: "randomly select a stocking or not select one"
+      let stockingIndex: number | undefined = undefined;
+      if (tryOnStockingImages.length > 0) {
+        // Create a pool of indices: -1 (none) and 0 to length-1
+        const pool = [-1, ...Array.from({ length: tryOnStockingImages.length }, (_, i) => i)];
+        const selected = pool[Math.floor(Math.random() * pool.length)];
+        if (selected !== -1) {
+          stockingIndex = selected;
+        }
       }
-    }));
+
+      return {
+        sourceIndex: index,
+        stockingIndex: stockingIndex,
+        result: {
+          id: `tryon-${Date.now()}-${index}`,
+          poseId: 'tryon',
+          status: 'loading' as const
+        }
+      };
+    });
 
     setTryOnResults(newResults);
     setIsProcessing(true);
@@ -481,14 +498,38 @@ const App: React.FC = () => {
       await Promise.all(newResults.map(async (item, index) => {
         try {
           const clothingImg = tryOnClothingImages[index];
+          const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
           
+          let prompt = TRYON_PROMPT;
+          if (stockingImg) {
+            prompt = `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a clothing product (garment).
+Input 2: An image of a model standing in a scene.
+Input 3: An image of stockings/hosiery.
+
+Task:
+1. Generate a photorealistic image of the model from Input 2 wearing the clothing from Input 1 AND the stockings from Input 3.
+2. The clothing from Input 1 must completely replace the model's original outfit.
+3. The stockings from Input 3 must be worn on the model's legs.
+4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot (or wearing the stockings without shoes). Ensure the feet are flat on the ground.
+8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+9. Ensure high fidelity for the clothing and stockings texture and fit.
+9:16`;
+          }
+
           const imageUrl = await generateTryOn(
             tryOnModelImage.base64,
             tryOnModelImage.mimeType,
             clothingImg.base64,
             clothingImg.mimeType,
-            TRYON_PROMPT,
-            commonApiConfig
+            prompt,
+            commonApiConfig,
+            stockingImg?.base64,
+            stockingImg?.mimeType
           );
 
           setTryOnResults(prev => prev.map(r => 
@@ -514,20 +555,56 @@ const App: React.FC = () => {
     const clothingImg = tryOnClothingImages[index];
     if (!clothingImg) return;
 
+    // Re-roll stocking selection on retry? Or keep same?
+    // Let's re-roll to give user variety
+    let stockingIndex: number | undefined = undefined;
+    if (tryOnStockingImages.length > 0) {
+      const pool = [-1, ...Array.from({ length: tryOnStockingImages.length }, (_, i) => i)];
+      const selected = pool[Math.floor(Math.random() * pool.length)];
+      if (selected !== -1) {
+        stockingIndex = selected;
+      }
+    }
+
     setTryOnResults(prev => prev.map(r => 
       r.sourceIndex === index 
-        ? { ...r, result: { ...r.result, status: 'loading', error: undefined } }
+        ? { ...r, stockingIndex: stockingIndex, result: { ...r.result, status: 'loading', error: undefined } }
         : r
     ));
 
     try {
+      const stockingImg = stockingIndex !== undefined ? tryOnStockingImages[stockingIndex] : undefined;
+      
+      let prompt = TRYON_PROMPT;
+      if (stockingImg) {
+        prompt = `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a clothing product (garment).
+Input 2: An image of a model standing in a scene.
+Input 3: An image of stockings/hosiery.
+
+Task:
+1. Generate a photorealistic image of the model from Input 2 wearing the clothing from Input 1 AND the stockings from Input 3.
+2. The clothing from Input 1 must completely replace the model's original outfit.
+3. The stockings from Input 3 must be worn on the model's legs.
+4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot (or wearing the stockings without shoes). Ensure the feet are flat on the ground.
+8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+9. Ensure high fidelity for the clothing and stockings texture and fit.
+9:16`;
+      }
+
       const imageUrl = await generateTryOn(
         tryOnModelImage.base64,
         tryOnModelImage.mimeType,
         clothingImg.base64,
         clothingImg.mimeType,
-        TRYON_PROMPT,
-        commonApiConfig
+        prompt,
+        commonApiConfig,
+        stockingImg?.base64,
+        stockingImg?.mimeType
       );
 
       setTryOnResults(prev => prev.map(r => 
@@ -1236,6 +1313,23 @@ const App: React.FC = () => {
                                     />
                                 </div>
                             )}
+
+                            {tryOnModelImage && (
+                                <div className="animate-in fade-in slide-in-from-bottom-4">
+                                    <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+                                        <span className="bg-slate-800 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>
+                                        上传丝袜平铺图 (可选/批量)
+                                    </h3>
+                                    <p className="text-xs text-slate-500 mb-2">上传后，AI 将在生成时随机选择一款丝袜搭配，或随机不穿丝袜。</p>
+                                    <BatchImageUploader 
+                                        currentImages={tryOnStockingImages}
+                                        onImagesSelected={(imgs) => {
+                                            setTryOnStockingImages(imgs);
+                                        }}
+                                        maxImages={30}
+                                    />
+                                </div>
+                            )}
                         </div>
 
                         {tryOnModelImage && tryOnClothingImages.length > 0 && (
@@ -1259,6 +1353,7 @@ const App: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
                                 {tryOnResults.map((item, idx) => {
                                     const clothingImg = tryOnClothingImages[item.sourceIndex];
+                                    const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
                                     const { result } = item;
                                     
                                     return (
@@ -1279,7 +1374,7 @@ const App: React.FC = () => {
                                             <div className="p-4 grid grid-cols-2 gap-2 h-64">
                                                 {/* Source */}
                                                 <div className="relative rounded-lg overflow-hidden bg-slate-100 flex flex-col gap-1">
-                                                    <div className="relative h-1/2 rounded overflow-hidden">
+                                                    <div className="relative h-1/3 rounded overflow-hidden">
                                                         <img 
                                                             src={`data:${tryOnModelImage!.mimeType};base64,${tryOnModelImage!.base64}`} 
                                                             className="w-full h-full object-cover opacity-80" 
@@ -1287,13 +1382,27 @@ const App: React.FC = () => {
                                                         />
                                                         <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">模特</div>
                                                     </div>
-                                                    <div className="relative h-1/2 rounded overflow-hidden">
+                                                    <div className="relative h-1/3 rounded overflow-hidden">
                                                         <img 
                                                             src={`data:${clothingImg.mimeType};base64,${clothingImg.base64}`} 
                                                             className="w-full h-full object-cover opacity-80" 
                                                             alt="Clothing" 
                                                         />
                                                         <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">衣服</div>
+                                                    </div>
+                                                    <div className="relative h-1/3 rounded overflow-hidden bg-slate-200 flex items-center justify-center">
+                                                        {stockingImg ? (
+                                                            <>
+                                                                <img 
+                                                                    src={`data:${stockingImg.mimeType};base64,${stockingImg.base64}`} 
+                                                                    className="w-full h-full object-cover opacity-80" 
+                                                                    alt="Stocking" 
+                                                                />
+                                                                <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">丝袜</div>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-[10px] text-slate-400">无丝袜</span>
+                                                        )}
                                                     </div>
                                                 </div>
 
