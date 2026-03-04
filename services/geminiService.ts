@@ -32,8 +32,8 @@ export const generateImageEdit = async (
   // Prepare generation config
   const generationConfig: any = {};
   
-  // Only apply imageConfig (resolution) for the Pro model (Nano Banana 2 / gemini-3-pro-image-preview)
-  if (model === 'gemini-3-pro-image-preview' && imageSize) {
+  // Only apply imageConfig (resolution) for the Pro model (Nano Banana 2 / gemini-3-pro-image-preview) or Flash Preview
+  if ((model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview') && imageSize) {
     generationConfig.imageConfig = {
       imageSize: imageSize
     };
@@ -117,7 +117,7 @@ export const generateTryOn = async (
     }
   };
   
-  if (model === 'gemini-3-pro-image-preview' && imageSize) {
+  if ((model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview') && imageSize) {
     generationConfig.imageConfig.imageSize = imageSize;
   }
 

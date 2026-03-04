@@ -803,14 +803,15 @@ Task:
                         >
                             <option value="gemini-2.5-flash-image">Nano Banana 1 (快速/Flash)</option>
                             <option value="gemini-3-pro-image-preview">Nano Banana 2 (高清/Pro)</option>
+                            <option value="gemini-3.1-flash-image-preview">Nano Banana 3 (Flash Preview)</option>
                         </select>
                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
                             <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
                         </div>
                     </div>
                 </div>
-
-                {selectedModel === 'gemini-3-pro-image-preview' && (
+                
+                {(selectedModel === 'gemini-3-pro-image-preview' || selectedModel === 'gemini-3.1-flash-image-preview') && (
                     <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
                         <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"></div>
                         <span className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
