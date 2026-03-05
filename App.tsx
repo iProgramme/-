@@ -11,31 +11,89 @@ import { ImageModal } from './components/ImageModal';
 import { Button } from './components/Button';
 import { Layers, Wand2, Sparkles, AlertTriangle, AlertCircle, Settings, X, Check, Globe, Key, Smartphone, ArrowRight, Download, ZoomIn, RefreshCw, Hash, Camera, Copy, Monitor, Zap, Box, Shirt } from 'lucide-react';
 
-// Mirror Selfie Specific Poses to cycle through (Batch Mode)
-const MIRROR_POSES = [
-  "one hand on hip, standing confident",
-  "peace sign with free hand, cute standing pose",
-  "slightly leaning to the side, relaxed",
-  "one leg crossed in front, fashion standing pose",
-  "adjusting hair with free hand",
-  "holding a coffee cup in free hand",
-  "hand in pocket, cool standing pose",
-  "waving slightly, friendly pose",
-  "showing outfit details, slight side angle",
-  "two hands holding phone (if possible), steady stance"
-];
-
 // Selfie Variations Templates (Single Image -> 8 Variations)
 // 2 Sitting, 2 Kneeling, 2 Squatting, 2 Standing
 const SELFIE_TEMPLATES = [
-  { label: "地板坐姿 1", prompt: "Sitting on the floor, legs crossed comfortably. Mirror selfie style, phone covering face." },
-  { label: "地板坐姿 2", prompt: "Sitting on the floor, legs extended to the side, leaning on one hand. Mirror selfie style, phone covering face." },
-  { label: "地板跪姿 1", prompt: "Kneeling on the floor, sitting on heels, cute pose. Mirror selfie style, phone covering face." },
-  { label: "地板跪姿 2", prompt: "Kneeling on one knee (proposing style but casual), fashion pose. Mirror selfie style, phone covering face." },
-  { label: "地板蹲姿 1", prompt: "Squatting on the floor, cool street style vibe. Mirror selfie style, phone covering face." },
-  { label: "地板蹲姿 2", prompt: "Deep squat on the floor, casual and trendy. Mirror selfie style, phone covering face." },
-  { label: "站姿 1", prompt: "Standing pose, slight turn to show outfit side profile. Mirror selfie style, phone covering face." },
-  { label: "站姿 2", prompt: "Standing pose, facing forward, confident stance. Mirror selfie style, phone covering face." }
+  { 
+    label: "地板坐姿 1", 
+    prompts: [
+      "Sitting on the floor, legs crossed comfortably. Mirror selfie style, phone covering face.",
+      "Sitting on the floor, one leg extended, one leg bent. Mirror selfie style, phone covering face.",
+      "Sitting on the floor, hugging knees to chest. Mirror selfie style, phone covering face.",
+      "Sitting on the floor, leaning forward with elbows on knees. Mirror selfie style, phone covering face.",
+      "Sitting on the floor, butterfly stretch pose (soles of feet together). Mirror selfie style, phone covering face."
+    ]
+  },
+  { 
+    label: "地板坐姿 2", 
+    prompts: [
+      "Sitting on the floor, legs extended to the side, leaning on one hand. Mirror selfie style, phone covering face.",
+      "Sitting on the floor, leaning back on hands, legs straight out. Mirror selfie style, phone covering face.",
+      "Sitting on the floor, side saddle pose (legs to one side). Mirror selfie style, phone covering face.",
+      "Sitting on the floor, legs wide apart in a V-shape, hands between legs. Mirror selfie style, phone covering face.",
+      "Sitting on the floor, one leg tucked under, casual pose. Mirror selfie style, phone covering face."
+    ]
+  },
+  { 
+    label: "地板跪姿 1", 
+    prompts: [
+      "Kneeling on the floor, sitting on heels, cute pose. Mirror selfie style, phone covering face.",
+      "Kneeling on the floor, upright posture, hands on thighs. Mirror selfie style, phone covering face.",
+      "Kneeling on the floor, leaning forward slightly toward the mirror. Mirror selfie style, phone covering face.",
+      "Kneeling on the floor, hands on hips, confident pose. Mirror selfie style, phone covering face.",
+      "Kneeling on the floor, sitting on heels, leaning back slightly on hands. Mirror selfie style, phone covering face."
+    ]
+  },
+  { 
+    label: "地板跪姿 2", 
+    prompts: [
+      "Kneeling on one knee (proposing style but casual), fashion pose. Mirror selfie style, phone covering face.",
+      "Kneeling on one knee, other leg extended to side. Mirror selfie style, phone covering face.",
+      "High kneeling pose, engaging core, upright. Mirror selfie style, phone covering face.",
+      "Kneeling on one knee, elbow resting on the raised knee. Mirror selfie style, phone covering face.",
+      "Kneeling on one knee, body turned slightly to the side. Mirror selfie style, phone covering face."
+    ]
+  },
+  { 
+    label: "地板蹲姿 1", 
+    prompts: [
+      "Squatting on the floor, cool street style vibe. Mirror selfie style, phone covering face.",
+      "Squatting, resting elbows on knees. Mirror selfie style, phone covering face.",
+      "Squatting with feet wide apart. Mirror selfie style, phone covering face.",
+      "Squatting, one leg extended to the side (Cossack squat style). Mirror selfie style, phone covering face.",
+      "Squatting, looking down at the phone, moody vibe. Mirror selfie style, phone covering face."
+    ]
+  },
+  { 
+    label: "地板蹲姿 2", 
+    prompts: [
+      "Deep squat on the floor, casual and trendy. Mirror selfie style, phone covering face.",
+      "Squatting on toes, balancing. Mirror selfie style, phone covering face.",
+      "Side squat pose, angled to the mirror. Mirror selfie style, phone covering face.",
+      "Full deep squat (Asian squat), comfortable and grounded. Mirror selfie style, phone covering face.",
+      "Squatting, holding knees with free hand. Mirror selfie style, phone covering face."
+    ]
+  },
+  { 
+    label: "站姿 1", 
+    prompts: [
+      "Standing pose, slight turn to show outfit side profile. Mirror selfie style, phone covering face.",
+      "Standing pose, one leg forward. Mirror selfie style, phone covering face.",
+      "Standing pose, leaning weight on one hip (contrapposto). Mirror selfie style, phone covering face.",
+      "Standing pose, looking back over shoulder slightly. Mirror selfie style, phone covering face.",
+      "Standing pose, leaning against a wall (implied). Mirror selfie style, phone covering face."
+    ]
+  },
+  { 
+    label: "站姿 2", 
+    prompts: [
+      "Standing pose, facing forward, confident stance. Mirror selfie style, phone covering face.",
+      "Standing pose, crossing legs at ankles. Mirror selfie style, phone covering face.",
+      "Standing pose, walking motion (mid-stride). Mirror selfie style, phone covering face.",
+      "Standing pose, hand on hip, power pose. Mirror selfie style, phone covering face.",
+      "Standing pose, wide stance, fashion model vibe. Mirror selfie style, phone covering face."
+    ]
+  }
 ];
 
 const TRYON_PROMPT = `You are an expert AI fashion stylist and photographer.
@@ -55,9 +113,9 @@ Task:
 9:16`;
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'poses' | 'same_pose' | 'selfie_var' | 'magic' | 'mirror' | 'try_on'>('poses');
+  const [activeTab, setActiveTab] = useState<'poses' | 'same_pose' | 'selfie_var' | 'magic' | 'try_on'>('poses');
   
-  // Single Image State (Pose & Magic)
+  // Single Image State (Pose)
   const [sourceImage, setSourceImage] = useState<UploadedImage | null>(null);
   const [generationCount, setGenerationCount] = useState<number>(4); // Default to 4
   
@@ -66,13 +124,13 @@ const App: React.FC = () => {
   const [samePoseResults, setSamePoseResults] = useState<GenerationResult[]>([]);
   const [samePoseCount, setSamePoseCount] = useState<number>(8);
 
-  // Batch Image State (Mirror Selfie)
-  const [mirrorImages, setMirrorImages] = useState<UploadedImage[]>([]);
-  const [mirrorResults, setMirrorResults] = useState<{sourceIndex: number, result: GenerationResult}[]>([]);
+  // Magic Edit State (Batch)
+  const [magicImages, setMagicImages] = useState<UploadedImage[]>([]);
+  const [magicResults, setMagicResults] = useState<{sourceIndex: number, result: GenerationResult}[]>([]);
 
   // Selfie Variation State (New Tab)
   const [selfieSourceImage, setSelfieSourceImage] = useState<UploadedImage | null>(null);
-  const [selfieResults, setSelfieResults] = useState<{templateIndex: number, result: GenerationResult}[]>([]);
+  const [selfieResults, setSelfieResults] = useState<{templateIndex: number, result: GenerationResult, prompt: string}[]>([]);
 
   // Try-on State (New Tab)
   const [tryOnModelImage, setTryOnModelImage] = useState<UploadedImage | null>(null);
@@ -84,7 +142,6 @@ const App: React.FC = () => {
   const [customPoseInput, setCustomPoseInput] = useState('');
   
   const [results, setResults] = useState<GenerationResult[]>([]); // For single image poses
-  const [magicResult, setMagicResult] = useState<GenerationResult | null>(null);
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -188,24 +245,92 @@ const App: React.FC = () => {
     }
   };
 
-  const handleMagicEdit = async (prompt: string) => {
-    if (!sourceImage) return;
+  const downloadAll = (urls: string[], prefix: string) => {
+    urls.forEach((url, i) => {
+      setTimeout(() => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${prefix}-${i + 1}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }, i * 200);
+    });
+  };
 
-    setMagicResult({ id: 'custom-magic', poseId: 'custom', status: 'loading' });
+  const handleMagicEdit = async (prompt: string) => {
+    if (magicImages.length === 0) return;
+
+    const newResults = magicImages.map((_, index) => ({
+      sourceIndex: index,
+      result: {
+        id: `magic-${Date.now()}-${index}`,
+        poseId: 'magic',
+        status: 'loading' as const
+      }
+    }));
+
+    setMagicResults(newResults);
     setIsProcessing(true);
 
     try {
+      await Promise.all(newResults.map(async (item, index) => {
+        try {
+          const sourceImg = magicImages[index];
+          const imageUrl = await generateImageEdit(
+            sourceImg.base64,
+            sourceImg.mimeType,
+            prompt,
+            commonApiConfig
+          );
+
+          setMagicResults(prev => prev.map(r => 
+            r.sourceIndex === index 
+              ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
+              : r
+          ));
+        } catch (error: any) {
+           setMagicResults(prev => prev.map(r => 
+            r.sourceIndex === index 
+              ? { ...r, result: { ...r.result, status: 'error', error: error.message || '魔法施放失败' } } 
+              : r
+          ));
+        }
+      }));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRetryMagicEdit = async (index: number, prompt: string) => {
+    const sourceImg = magicImages[index];
+    if (!sourceImg) return;
+
+    setMagicResults(prev => prev.map(r => 
+      r.sourceIndex === index 
+        ? { ...r, result: { ...r.result, status: 'loading', error: undefined } }
+        : r
+    ));
+
+    try {
       const imageUrl = await generateImageEdit(
-        sourceImage.base64,
-        sourceImage.mimeType,
+        sourceImg.base64,
+        sourceImg.mimeType,
         prompt,
         commonApiConfig
       );
-      setMagicResult({ id: 'custom-magic', poseId: 'custom', status: 'success', imageUrl });
+
+      setMagicResults(prev => prev.map(r => 
+        r.sourceIndex === index 
+          ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
+          : r
+      ));
     } catch (error: any) {
-      setMagicResult({ id: 'custom-magic', poseId: 'custom', status: 'error', error: error.message || '魔法施放失败' });
-    } finally {
-      setIsProcessing(false);
+      setMagicResults(prev => prev.map(r => 
+        r.sourceIndex === index 
+          ? { ...r, result: { ...r.result, status: 'error', error: error.message || '重试失败' } } 
+          : r
+      ));
     }
   };
 
@@ -291,107 +416,24 @@ const App: React.FC = () => {
     }
   };
 
-  // --- Mirror Selfie (Batch) Handlers ---
-
-  const handleMirrorGeneration = async () => {
-    if (mirrorImages.length === 0) return;
-
-    // Initialize results placeholders
-    const newResults = mirrorImages.map((_, index) => ({
-      sourceIndex: index,
-      result: {
-        id: `mirror-${Date.now()}-${index}`,
-        poseId: 'mirror',
-        status: 'loading' as const
-      }
-    }));
-
-    setMirrorResults(newResults);
-    setIsProcessing(true);
-
-    try {
-      // Process in parallel
-      await Promise.all(newResults.map(async (item, index) => {
-        try {
-          // Cycle through prompts
-          const poseDetail = MIRROR_POSES[index % MIRROR_POSES.length];
-          const prompt = `Change pose to a standing mirror selfie. ${poseDetail}. Ensure the phone covers the face (mirror selfie style). Minor angle adjustment only. Maintain clothes and background identity. High quality photorealistic.`;
-          
-          const sourceImg = mirrorImages[index];
-          const imageUrl = await generateImageEdit(
-            sourceImg.base64,
-            sourceImg.mimeType,
-            prompt,
-            commonApiConfig
-          );
-
-          setMirrorResults(prev => prev.map(r => 
-            r.sourceIndex === index 
-              ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
-              : r
-          ));
-        } catch (error: any) {
-           setMirrorResults(prev => prev.map(r => 
-            r.sourceIndex === index 
-              ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
-              : r
-          ));
-        }
-      }));
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleRetryMirrorImage = async (index: number) => {
-    const sourceImg = mirrorImages[index];
-    if (!sourceImg) return;
-
-    setMirrorResults(prev => prev.map(r => 
-      r.sourceIndex === index 
-        ? { ...r, result: { ...r.result, status: 'loading', error: undefined } }
-        : r
-    ));
-
-    try {
-      const poseDetail = MIRROR_POSES[index % MIRROR_POSES.length];
-      const prompt = `Change pose to a standing mirror selfie. ${poseDetail}. Ensure the phone covers the face (mirror selfie style). Minor angle adjustment only. Maintain clothes and background identity. High quality photorealistic.`;
-      
-      const imageUrl = await generateImageEdit(
-        sourceImg.base64,
-        sourceImg.mimeType,
-        prompt,
-        commonApiConfig
-      );
-
-      setMirrorResults(prev => prev.map(r => 
-        r.sourceIndex === index 
-          ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
-          : r
-      ));
-    } catch (error: any) {
-      setMirrorResults(prev => prev.map(r => 
-        r.sourceIndex === index 
-          ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Retry failed' } } 
-          : r
-      ));
-    }
-  };
-
-  // --- Selfie Variations (New Tab) Handlers ---
-
   const handleSelfieVariationsGeneration = async () => {
     if (!selfieSourceImage) return;
 
     // Initialize 8 slots based on templates
-    const newResults = SELFIE_TEMPLATES.map((_, index) => ({
-      templateIndex: index,
-      result: {
-        id: `selfie-var-${Date.now()}-${index}`,
-        poseId: 'selfie-var',
-        status: 'loading' as const
-      }
-    }));
+    const newResults = SELFIE_TEMPLATES.map((template, index) => {
+      // Randomly select a prompt from the available prompts for this template
+      const randomPrompt = template.prompts[Math.floor(Math.random() * template.prompts.length)];
+      
+      return {
+        templateIndex: index,
+        prompt: randomPrompt,
+        result: {
+          id: `selfie-var-${Date.now()}-${index}`,
+          poseId: 'selfie-var',
+          status: 'loading' as const
+        }
+      };
+    });
 
     setSelfieResults(newResults);
     setIsProcessing(true);
@@ -399,8 +441,7 @@ const App: React.FC = () => {
     try {
       await Promise.all(newResults.map(async (item, index) => {
         try {
-          const template = SELFIE_TEMPLATES[index];
-          const prompt = `Change pose to: ${template.prompt}. Ensure the phone covers the face (mirror selfie style). Maintain clothes and background identity. High quality photorealistic.`;
+          const prompt = `Change pose to: ${item.prompt}. Ensure the phone covers the face (mirror selfie style). Maintain clothes and background identity. High quality photorealistic.`;
           
           const imageUrl = await generateImageEdit(
             selfieSourceImage.base64,
@@ -430,15 +471,18 @@ const App: React.FC = () => {
   const retrySelfieVariation = async (index: number) => {
     if (!selfieSourceImage) return;
 
+    // Select a new random prompt for retry to give variety
+    const template = SELFIE_TEMPLATES[index];
+    const newRandomPrompt = template.prompts[Math.floor(Math.random() * template.prompts.length)];
+
     setSelfieResults(prev => prev.map(r => 
       r.templateIndex === index 
-        ? { ...r, result: { ...r.result, status: 'loading', error: undefined } }
+        ? { ...r, prompt: newRandomPrompt, result: { ...r.result, status: 'loading', error: undefined } }
         : r
     ));
 
     try {
-      const template = SELFIE_TEMPLATES[index];
-      const prompt = `Change pose to: ${template.prompt}. Ensure the phone covers the face (mirror selfie style). Maintain clothes and background identity. High quality photorealistic.`;
+      const prompt = `Change pose to: ${newRandomPrompt}. Ensure the phone covers the face (mirror selfie style). Maintain clothes and background identity. High quality photorealistic.`;
       
       const imageUrl = await generateImageEdit(
         selfieSourceImage.base64,
@@ -775,17 +819,6 @@ Task:
                     <Wand2 size={18} />
                     魔法编辑
                 </button>
-                <button
-                    onClick={() => setActiveTab('mirror')}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-sm transition-all whitespace-nowrap ${
-                    activeTab === 'mirror' 
-                        ? 'bg-pink-50 text-pink-700 shadow-sm' 
-                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                    }`}
-                >
-                    <Smartphone size={18} />
-                    对镜自拍 (批量)
-                </button>
             </div>
 
             {/* Global Model Selector */}
@@ -972,6 +1005,16 @@ Task:
                     {/* Results for Same Pose Variations */}
                     {samePoseResults.length > 0 && (
                         <div className="animate-in fade-in slide-in-from-bottom-4">
+                            <div className="flex justify-between items-center mb-4 px-1">
+                                <h3 className="text-lg font-bold text-slate-800">生成结果列表</h3>
+                                <button 
+                                    onClick={() => downloadAll(samePoseResults.map(r => r.imageUrl).filter(Boolean) as string[], 'same-pose')}
+                                    className="flex items-center gap-2 px-4 py-2 bg-teal-100 text-teal-700 rounded-lg font-medium hover:bg-teal-200 transition-colors text-sm"
+                                >
+                                    <Download size={16} />
+                                    一键下载全部
+                                </button>
+                            </div>
                             <ResultGrid 
                                 results={samePoseResults} 
                                 onRetry={retrySamePose} 
@@ -1095,18 +1138,19 @@ Task:
                     <section>
                         <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                             <span className="bg-slate-800 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
-                            上传原图
+                            上传原图 (批量)
                         </h2>
-                        <ImageUploader 
-                            currentImage={sourceImage} 
-                            onImageSelected={(img) => {
-                                setSourceImage(img);
-                                setMagicResult(null);
-                            }} 
+                        <BatchImageUploader 
+                            currentImages={magicImages} 
+                            onImagesSelected={(imgs) => {
+                                setMagicImages(imgs);
+                                setMagicResults([]);
+                            }}
+                            maxImages={30}
                         />
                     </section>
 
-                    {sourceImage && (
+                    {magicImages.length > 0 && (
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
                             <MagicEditor 
                                 onGenerate={handleMagicEdit} 
@@ -1114,162 +1158,94 @@ Task:
                                 disabled={isProcessing}
                             />
                             
-                            {magicResult && (
-                                <div className="space-y-4">
-                                    <h3 className="text-lg font-bold text-slate-800">编辑结果</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="bg-white p-4 rounded-xl border border-slate-200">
-                                            <div className="mb-2 text-sm font-medium text-slate-500">原图</div>
-                                            <img src={`data:${sourceImage.mimeType};base64,${sourceImage.base64}`} className="rounded-lg w-full" alt="Original" />
-                                        </div>
-                                        <div className="bg-white p-4 rounded-xl border border-slate-200">
-                                            <div className="mb-2 text-sm font-medium text-purple-600">AI 编辑后</div>
-                                            {magicResult.status === 'loading' && (
-                                            <div className="aspect-[4/3] flex flex-col items-center justify-center bg-slate-50 rounded-lg">
-                                                <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                                                <span className="text-purple-600 font-medium animate-pulse">魔法施放中...</span>
-                                            </div>
-                                            )}
-                                            {magicResult.status === 'error' && (
-                                            <div className="aspect-[4/3] flex flex-col items-center justify-center bg-red-50 rounded-lg text-red-500 p-4 text-center">
-                                                <AlertCircle size={32} className="mb-2" />
-                                                <p>{magicResult.error}</p>
-                                            </div>
-                                            )}
-                                            {magicResult.status === 'success' && magicResult.imageUrl && (
-                                            <div className="relative group cursor-pointer" onClick={() => setViewImageUrl(magicResult.imageUrl!)}>
-                                                <img src={magicResult.imageUrl} className="rounded-lg w-full shadow-md" alt="Edited" />
-                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                                    <span className="bg-black/50 text-white px-3 py-1 rounded-full text-sm backdrop-blur-sm">查看大图</span>
+                            {magicResults.length > 0 && (
+                                <div className="space-y-6">
+                                    <div className="flex justify-between items-center px-4">
+                                        <h3 className="text-xl font-bold text-slate-800">编辑结果列表</h3>
+                                        <button 
+                                            onClick={() => downloadAll(magicResults.map(r => r.result.imageUrl).filter(Boolean) as string[], 'magic-edit')}
+                                            className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg font-medium hover:bg-purple-200 transition-colors text-sm"
+                                        >
+                                            <Download size={16} />
+                                            一键下载全部
+                                        </button>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
+                                        {magicResults.map((item, idx) => {
+                                            const sourceImg = magicImages[item.sourceIndex];
+                                            const { result } = item;
+                                            
+                                            return (
+                                                <div key={idx} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col">
+                                                    <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                                                        <span className="font-medium text-slate-600 text-sm">图片 #{idx + 1}</span>
+                                                        <div className="flex items-center gap-3">
+                                                            <button 
+                                                                onClick={() => handleRetryMagicEdit(idx, "Retry magic edit")} // Note: we might need to store the prompt if we want true retry, but for now we can just pass a generic or maybe we don't need retry here if prompt is lost. Actually MagicEditor has its own state. Let's just disable retry or pass a generic prompt. Wait, the user might want to retry with the same prompt. Let's just use a generic retry or remove the retry button for magic batch. Let's remove the retry button for simplicity since the prompt is in the MagicEditor component.
+                                                                disabled={true}
+                                                                className="hidden p-1.5 bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                                                                title="重新生成这张"
+                                                            >
+                                                                <RefreshCw size={14} className={result.status === 'loading' ? 'animate-spin' : ''} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="p-4 grid grid-cols-2 gap-2 h-64">
+                                                        {/* Source */}
+                                                        <div className="relative rounded-lg overflow-hidden bg-slate-100">
+                                                            <img 
+                                                                src={`data:${sourceImg.mimeType};base64,${sourceImg.base64}`} 
+                                                                className="w-full h-full object-cover opacity-80" 
+                                                                alt="Source" 
+                                                            />
+                                                            <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">原图</div>
+                                                        </div>
+
+                                                        {/* Result */}
+                                                        <div className="relative rounded-lg overflow-hidden bg-slate-50 border border-slate-100 flex items-center justify-center group">
+                                                            {result.status === 'loading' && (
+                                                                <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                                                            )}
+                                                            {result.status === 'error' && (
+                                                                <div className="text-red-400 text-xs text-center p-2">
+                                                                    <AlertCircle size={20} className="mx-auto mb-1" />
+                                                                    生成失败
+                                                                </div>
+                                                            )}
+                                                            {result.status === 'success' && result.imageUrl && (
+                                                                <>
+                                                                    <img 
+                                                                        src={result.imageUrl} 
+                                                                        className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
+                                                                        alt="Result" 
+                                                                        onClick={() => setViewImageUrl(result.imageUrl!)}
+                                                                    />
+                                                                    <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        <button 
+                                                                            className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
+                                                                            onClick={() => setViewImageUrl(result.imageUrl!)}
+                                                                        >
+                                                                            <ZoomIn size={14} />
+                                                                        </button>
+                                                                        <a 
+                                                                            href={result.imageUrl}
+                                                                            download={`magic-edit-${idx}.png`}
+                                                                            className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
+                                                                        >
+                                                                            <Download size={14} />
+                                                                        </a>
+                                                                    </div>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            )}
-                                        </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
                         </div>
-                    )}
-                </div>
-            )}
-
-            {/* 5. MIRROR SELFIE (BATCH) */}
-            {activeTab === 'mirror' && (
-                <div className="space-y-8">
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm text-center max-w-4xl mx-auto">
-                        <div className="flex justify-center mb-4 text-pink-500">
-                            <Smartphone size={32} />
-                        </div>
-                        <h2 className="text-2xl font-bold text-slate-800 mb-2">批量对镜自拍生成</h2>
-                        <p className="text-slate-500 mb-6">上传多张照片（1-30张），AI 将自动为每一张生成不同的站姿，并保持手机挡脸风格。</p>
-                        
-                        <BatchImageUploader 
-                            currentImages={mirrorImages}
-                            onImagesSelected={(imgs) => {
-                                setMirrorImages(imgs);
-                                // Clear results if images change significantly (optional, but safer)
-                                if (imgs.length === 0) setMirrorResults([]);
-                            }}
-                            maxImages={30}
-                        />
-
-                        {mirrorImages.length > 0 && (
-                            <div className="mt-8 flex justify-center">
-                                <Button 
-                                    onClick={handleMirrorGeneration} 
-                                    isLoading={isProcessing}
-                                    className="px-10 py-3 text-lg bg-pink-600 hover:bg-pink-700 shadow-lg hover:shadow-pink-200/50"
-                                >
-                                    <Sparkles size={20} />
-                                    一键生成 {mirrorImages.length} 张自拍
-                                </Button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Results Grid for Mirror Selfie */}
-                    {mirrorResults.length > 0 && (
-                         <div className="space-y-6">
-                            <h3 className="text-xl font-bold text-slate-800 px-4">生成结果列表</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
-                                {mirrorResults.map((item, idx) => {
-                                    const sourceImg = mirrorImages[item.sourceIndex];
-                                    const { result } = item;
-                                    
-                                    return (
-                                        <div key={idx} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col">
-                                            <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                                                <span className="font-medium text-slate-600 text-sm">图片 #{idx + 1}</span>
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-xs text-slate-400">姿势: {idx % MIRROR_POSES.length + 1}</span>
-                                                    <button 
-                                                        onClick={() => handleRetryMirrorImage(idx)}
-                                                        disabled={result.status === 'loading'}
-                                                        className="p-1.5 bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                                                        title="重新生成这张"
-                                                    >
-                                                        <RefreshCw size={14} className={result.status === 'loading' ? 'animate-spin' : ''} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div className="p-4 grid grid-cols-2 gap-2 h-64">
-                                                {/* Source */}
-                                                <div className="relative rounded-lg overflow-hidden bg-slate-100">
-                                                    <img 
-                                                        src={`data:${sourceImg.mimeType};base64,${sourceImg.base64}`} 
-                                                        className="w-full h-full object-cover opacity-80" 
-                                                        alt="Source" 
-                                                    />
-                                                    <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">原图</div>
-                                                </div>
-
-                                                {/* Result */}
-                                                <div className="relative rounded-lg overflow-hidden bg-slate-50 border border-slate-100 flex items-center justify-center group">
-                                                    {result.status === 'loading' && (
-                                                        <div className="w-8 h-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
-                                                    )}
-                                                    {result.status === 'error' && (
-                                                        <div className="text-red-400 text-xs text-center p-2">
-                                                            <AlertCircle size={20} className="mx-auto mb-1" />
-                                                            生成失败
-                                                        </div>
-                                                    )}
-                                                    {result.status === 'success' && result.imageUrl && (
-                                                        <>
-                                                            <img 
-                                                                src={result.imageUrl} 
-                                                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
-                                                                alt="Result" 
-                                                                onClick={() => setViewImageUrl(result.imageUrl!)}
-                                                            />
-                                                            <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <button 
-                                                                    className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
-                                                                    onClick={() => setViewImageUrl(result.imageUrl!)}
-                                                                >
-                                                                    <ZoomIn size={14} />
-                                                                </button>
-                                                                <a 
-                                                                    href={result.imageUrl}
-                                                                    download={`mirror-selfie-${idx}.png`}
-                                                                    className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
-                                                                >
-                                                                    <Download size={14} />
-                                                                </a>
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            {/* Pose description */}
-                                            <div className="px-4 py-2 text-xs text-slate-500 bg-slate-50 border-t border-slate-100 truncate">
-                                                {MIRROR_POSES[idx % MIRROR_POSES.length]}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                         </div>
                     )}
                 </div>
             )}
