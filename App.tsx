@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UploadedImage, PoseType, GenerationResult } from './types';
 import { POSES, VARIATION_COUNT } from './constants';
-import { generateImageEdit, generateTryOn } from './services/geminiService';
+import { generateImageEdit, generateTryOn, generatePoseTransfer } from './services/geminiService';
 import { ImageUploader } from './components/ImageUploader';
 import { BatchImageUploader } from './components/BatchImageUploader'; // New Component
 import { PoseSelector } from './components/PoseSelector';
@@ -112,8 +112,45 @@ Task:
 8. Ensure high fidelity for the clothing texture and fit.
 9:16`;
 
+const getClosestAspectRatio = (width: number, height: number): string => {
+  const ratio = width / height;
+  const supportedRatios = [
+    { value: "1:1", ratio: 1 },
+    { value: "3:4", ratio: 3 / 4 },
+    { value: "4:3", ratio: 4 / 3 },
+    { value: "9:16", ratio: 9 / 16 },
+    { value: "16:9", ratio: 16 / 9 },
+    { value: "1:4", ratio: 1 / 4 },
+    { value: "1:8", ratio: 1 / 8 },
+    { value: "4:1", ratio: 4 / 1 },
+    { value: "8:1", ratio: 8 / 1 },
+  ];
+
+  let closest = supportedRatios[0];
+  let minDiff = Math.abs(ratio - closest.ratio);
+
+  for (let i = 1; i < supportedRatios.length; i++) {
+    const diff = Math.abs(ratio - supportedRatios[i].ratio);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = supportedRatios[i];
+    }
+  }
+
+  return closest.value;
+};
+
+const getImageDimensions = (base64: string, mimeType: string): Promise<{width: number, height: number}> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.width, height: img.height });
+    img.onerror = reject;
+    img.src = `data:${mimeType};base64,${base64}`;
+  });
+};
+
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'poses' | 'same_pose' | 'selfie_var' | 'magic' | 'try_on'>('poses');
+  const [activeTab, setActiveTab] = useState<'poses' | 'same_pose' | 'selfie_var' | 'magic' | 'try_on' | 'pose_transfer'>('poses');
   
   // Single Image State (Pose)
   const [sourceImage, setSourceImage] = useState<UploadedImage | null>(null);
@@ -137,6 +174,11 @@ const App: React.FC = () => {
   const [tryOnClothingImages, setTryOnClothingImages] = useState<UploadedImage[]>([]);
   const [tryOnStockingImages, setTryOnStockingImages] = useState<UploadedImage[]>([]);
   const [tryOnResults, setTryOnResults] = useState<{sourceIndex: number, result: GenerationResult, stockingIndex?: number}[]>([]);
+
+  // Pose Transfer State (New Tab)
+  const [poseTransferBaseImage, setPoseTransferBaseImage] = useState<UploadedImage | null>(null);
+  const [poseTransferRefImages, setPoseTransferRefImages] = useState<UploadedImage[]>([]);
+  const [poseTransferResults, setPoseTransferResults] = useState<{sourceIndex: number, result: GenerationResult}[]>([]);
 
   const [selectedPose, setSelectedPose] = useState<PoseType | null>(null);
   const [customPoseInput, setCustomPoseInput] = useState('');
@@ -505,6 +547,96 @@ const App: React.FC = () => {
     }
   };
 
+  // --- Pose Transfer Handlers ---
+
+  const handlePoseTransferGeneration = async () => {
+    if (!poseTransferBaseImage || poseTransferRefImages.length === 0) return;
+
+    const newResults = poseTransferRefImages.map((_, index) => ({
+      sourceIndex: index,
+      result: {
+        id: `pose-transfer-${Date.now()}-${index}`,
+        poseId: 'pose-transfer',
+        status: 'loading' as const
+      }
+    }));
+
+    setPoseTransferResults(newResults);
+    setIsProcessing(true);
+
+    try {
+      // Calculate aspect ratio from base image
+      const dims = await getImageDimensions(poseTransferBaseImage.base64, poseTransferBaseImage.mimeType);
+      const aspectRatio = getClosestAspectRatio(dims.width, dims.height);
+
+      await Promise.all(newResults.map(async (item, index) => {
+        try {
+          const refImage = poseTransferRefImages[index];
+          
+          const imageUrl = await generatePoseTransfer(
+            poseTransferBaseImage.base64,
+            poseTransferBaseImage.mimeType,
+            refImage.base64,
+            refImage.mimeType,
+            { ...commonApiConfig, aspectRatio }
+          );
+
+          setPoseTransferResults(prev => prev.map(r => 
+            r.sourceIndex === index 
+              ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
+              : r
+          ));
+        } catch (error: any) {
+           setPoseTransferResults(prev => prev.map(r => 
+            r.sourceIndex === index 
+              ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
+              : r
+          ));
+        }
+      }));
+    } catch (error) {
+      console.error("Failed to get image dimensions", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRegeneratePoseTransferItem = async (sourceIndex: number) => {
+    if (!poseTransferBaseImage || !poseTransferRefImages[sourceIndex]) return;
+
+    setPoseTransferResults(prev => prev.map(r => 
+      r.sourceIndex === sourceIndex 
+        ? { ...r, result: { ...r.result, status: 'loading', error: undefined } } 
+        : r
+    ));
+
+    try {
+      const dims = await getImageDimensions(poseTransferBaseImage.base64, poseTransferBaseImage.mimeType);
+      const aspectRatio = getClosestAspectRatio(dims.width, dims.height);
+      const refImage = poseTransferRefImages[sourceIndex];
+      
+      const imageUrl = await generatePoseTransfer(
+        poseTransferBaseImage.base64,
+        poseTransferBaseImage.mimeType,
+        refImage.base64,
+        refImage.mimeType,
+        { ...commonApiConfig, aspectRatio }
+      );
+
+      setPoseTransferResults(prev => prev.map(r => 
+        r.sourceIndex === sourceIndex 
+          ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
+          : r
+      ));
+    } catch (error: any) {
+      setPoseTransferResults(prev => prev.map(r => 
+        r.sourceIndex === sourceIndex 
+          ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
+          : r
+      ));
+    }
+  };
+
   // --- Try-On (New Tab) Handlers ---
 
   const handleTryOnGeneration = async () => {
@@ -807,6 +939,17 @@ Task:
                 >
                     <Shirt size={18} />
                     模特换装
+                </button>
+                <button
+                    onClick={() => setActiveTab('pose_transfer')}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-sm transition-all whitespace-nowrap ${
+                    activeTab === 'pose_transfer' 
+                        ? 'bg-teal-50 text-teal-700 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                    }`}
+                >
+                    <RefreshCw size={18} />
+                    姿势迁移
                 </button>
                 <button
                     onClick={() => setActiveTab('magic')}
@@ -1412,6 +1555,168 @@ Task:
                                                                 <a 
                                                                     href={result.imageUrl}
                                                                     download={`tryon-${idx}.png`}
+                                                                    className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
+                                                                >
+                                                                    <Download size={14} />
+                                                                </a>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                         </div>
+                    )}
+                </div>
+            )}
+            {/* Pose Transfer Content */}
+            {activeTab === 'pose_transfer' && (
+                <div className="space-y-8 animate-in fade-in duration-500">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        {/* Base Image Upload */}
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                            <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                <span className="bg-teal-100 text-teal-700 p-1.5 rounded-lg">
+                                    <Camera size={20} />
+                                </span>
+                                上传底图 (保持人物)
+                            </h2>
+                            <p className="text-sm text-slate-500 mb-6">
+                                上传一张包含人物的底图，AI 将保持该人物的身份、面部特征、服装和背景风格。
+                            </p>
+                            <ImageUploader 
+                                onImageSelected={setPoseTransferBaseImage} 
+                                currentImage={poseTransferBaseImage} 
+                            />
+                        </div>
+
+                        {/* Reference Images Upload */}
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                            <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                <span className="bg-teal-100 text-teal-700 p-1.5 rounded-lg">
+                                    <Layers size={20} />
+                                </span>
+                                上传姿势参考图 (最多15张)
+                            </h2>
+                            <p className="text-sm text-slate-500 mb-6">
+                                上传包含目标姿势的参考图。底图中的人物将分别转换为这些参考图中的姿势。
+                            </p>
+                            <BatchImageUploader 
+                                onImagesSelected={setPoseTransferRefImages}
+                                currentImages={poseTransferRefImages}
+                                maxImages={15}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex justify-center pt-4">
+                        <Button 
+                            onClick={handlePoseTransferGeneration} 
+                            disabled={isProcessing || !poseTransferBaseImage || poseTransferRefImages.length === 0}
+                            size="lg"
+                            className="px-12 py-4 text-lg bg-teal-600 hover:bg-teal-700 shadow-teal-200"
+                        >
+                            {isProcessing ? (
+                                <>
+                                    <RefreshCw className="animate-spin mr-2" size={24} />
+                                    正在迁移姿势...
+                                </>
+                            ) : (
+                                <>
+                                    <Sparkles className="mr-2" size={24} />
+                                    一键迁移 ({poseTransferRefImages.length}张)
+                                </>
+                            )}
+                        </Button>
+                    </div>
+
+                    {/* Results Grid for Pose Transfer */}
+                    {poseTransferResults.length > 0 && (
+                         <div className="space-y-6">
+                            <div className="flex items-center justify-between px-4">
+                                <h3 className="text-xl font-bold text-slate-800">生成结果列表</h3>
+                                <Button 
+                                    onClick={() => downloadAll(poseTransferResults.map(r => r.result.imageUrl).filter(Boolean) as string[], 'pose-transfer')}
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={!poseTransferResults.some(r => r.result.status === 'success')}
+                                    className="flex items-center gap-2"
+                                >
+                                    <Download size={16} />
+                                    一键下载全部
+                                </Button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
+                                {poseTransferResults.map((item, idx) => {
+                                    const refImg = poseTransferRefImages[item.sourceIndex];
+                                    const { result } = item;
+                                    
+                                    return (
+                                        <div key={idx} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col">
+                                            <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                                                <span className="font-medium text-slate-600 text-sm">姿势 #{idx + 1}</span>
+                                                <button 
+                                                    onClick={() => handleRegeneratePoseTransferItem(item.sourceIndex)}
+                                                    disabled={result.status === 'loading'}
+                                                    className="text-slate-400 hover:text-teal-600 disabled:opacity-50 transition-colors flex items-center gap-1 text-xs"
+                                                >
+                                                    <RefreshCw size={14} className={result.status === 'loading' ? 'animate-spin' : ''} />
+                                                    重新生成
+                                                </button>
+                                            </div>
+                                            <div className="p-4 grid grid-cols-2 gap-2 h-64">
+                                                {/* Source */}
+                                                <div className="relative rounded-lg overflow-hidden bg-slate-100 flex flex-col gap-1">
+                                                    <div className="relative h-1/2 rounded overflow-hidden">
+                                                        <img 
+                                                            src={`data:${poseTransferBaseImage!.mimeType};base64,${poseTransferBaseImage!.base64}`} 
+                                                            className="w-full h-full object-cover opacity-80" 
+                                                            alt="Base" 
+                                                        />
+                                                        <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">底图</div>
+                                                    </div>
+                                                    <div className="relative h-1/2 rounded overflow-hidden">
+                                                        <img 
+                                                            src={`data:${refImg.mimeType};base64,${refImg.base64}`} 
+                                                            className="w-full h-full object-cover opacity-80" 
+                                                            alt="Reference Pose" 
+                                                        />
+                                                        <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">姿势</div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Result */}
+                                                <div className="relative rounded-lg overflow-hidden bg-slate-50 border border-slate-100 flex items-center justify-center group">
+                                                    {result.status === 'loading' && (
+                                                        <div className="w-8 h-8 border-2 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
+                                                    )}
+                                                    {result.status === 'error' && (
+                                                        <div className="text-red-400 text-xs text-center p-2">
+                                                            <AlertCircle size={20} className="mx-auto mb-1" />
+                                                            生成失败
+                                                        </div>
+                                                    )}
+                                                    {result.status === 'success' && result.imageUrl && (
+                                                        <>
+                                                            <img 
+                                                                src={result.imageUrl} 
+                                                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
+                                                                alt="Result" 
+                                                                onClick={() => setViewImageUrl(result.imageUrl!)}
+                                                            />
+                                                            <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <button 
+                                                                    className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
+                                                                    onClick={() => setViewImageUrl(result.imageUrl!)}
+                                                                >
+                                                                    <ZoomIn size={14} />
+                                                                </button>
+                                                                <a 
+                                                                    href={result.imageUrl}
+                                                                    download={`pose-transfer-${idx}.png`}
                                                                     className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
                                                                 >
                                                                     <Download size={14} />
