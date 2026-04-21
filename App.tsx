@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UploadedImage, PoseType, GenerationResult } from './types';
 import { POSES, VARIATION_COUNT } from './constants';
-import { generateImageEdit, generateTryOn, generatePoseTransfer } from './services/geminiService';
+import { generateImageEdit, generateTryOn, generatePoseTransfer, generateImageWithReference } from './services/geminiService';
 import { ImageUploader } from './components/ImageUploader';
 import { BatchImageUploader } from './components/BatchImageUploader'; // New Component
 import { PoseSelector } from './components/PoseSelector';
@@ -150,7 +150,7 @@ const getImageDimensions = (base64: string, mimeType: string): Promise<{width: n
 };
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'poses' | 'same_pose' | 'selfie_var' | 'magic' | 'try_on' | 'pose_transfer'>('poses');
+  const [activeTab, setActiveTab] = useState<'poses' | 'same_pose' | 'selfie_var' | 'magic' | 'try_on' | 'pose_transfer' | 'batch_tryon'>('poses');
   
   // Single Image State (Pose)
   const [sourceImage, setSourceImage] = useState<UploadedImage | null>(null);
@@ -165,9 +165,23 @@ const App: React.FC = () => {
   const [magicImages, setMagicImages] = useState<UploadedImage[]>([]);
   const [magicResults, setMagicResults] = useState<{sourceIndex: number, result: GenerationResult}[]>([]);
 
+  // Batch Try-on State (New Tab)
+  const [batchClothingImages, setBatchClothingImages] = useState<UploadedImage[]>([]);
+  const [batchPrompt, setBatchPrompt] = useState('一个人穿着参考图的所有服装站在镜子前自拍');
+  const [batchResults, setBatchResults] = useState<{id: string, sourceIndex: number, result: GenerationResult}[]>([]);
+
   // Selfie Variation State (New Tab)
   const [selfieSourceImage, setSelfieSourceImage] = useState<UploadedImage | null>(null);
-  const [selfieResults, setSelfieResults] = useState<{templateIndex: number, result: GenerationResult, prompt: string}[]>([]);
+  const [selfieResults, setSelfieResults] = useState<{
+    id: string;
+    templateLabel: string;
+    prompts: string[];
+    result: GenerationResult;
+    prompt: string;
+  }[]>([]);
+  const [selfieVarOnlyStanding, setSelfieVarOnlyStanding] = useState(false);
+  const [selfieVarBlockFace, setSelfieVarBlockFace] = useState(true);
+  const [selfieVarCount, setSelfieVarCount] = useState(8);
 
   // Try-on State (New Tab)
   const [tryOnModelImage, setTryOnModelImage] = useState<UploadedImage | null>(null);
@@ -461,16 +475,23 @@ const App: React.FC = () => {
   const handleSelfieVariationsGeneration = async () => {
     if (!selfieSourceImage) return;
 
-    // Initialize 8 slots based on templates
-    const newResults = SELFIE_TEMPLATES.map((template, index) => {
-      // Randomly select a prompt from the available prompts for this template
+    const availableTemplates = selfieVarOnlyStanding 
+      ? SELFIE_TEMPLATES.filter(t => t.label.includes('站姿'))
+      : SELFIE_TEMPLATES;
+
+    const newResults = Array.from({ length: selfieVarCount }).map((_, index) => {
+      const templateIndex = index % availableTemplates.length;
+      const template = availableTemplates[templateIndex];
       const randomPrompt = template.prompts[Math.floor(Math.random() * template.prompts.length)];
+      const id = `selfie-var-${Date.now()}-${index}`;
       
       return {
-        templateIndex: index,
+        id,
+        templateLabel: template.label,
+        prompts: template.prompts,
         prompt: randomPrompt,
         result: {
-          id: `selfie-var-${Date.now()}-${index}`,
+          id,
           poseId: 'selfie-var',
           status: 'loading' as const
         }
@@ -481,25 +502,41 @@ const App: React.FC = () => {
     setIsProcessing(true);
 
     try {
-      await Promise.all(newResults.map(async (item, index) => {
+      await Promise.all(newResults.map(async (item) => {
         try {
-          const prompt = `Change pose to: ${item.prompt}. Ensure the phone covers the face (mirror selfie style). Maintain clothes and background identity. High quality photorealistic.`;
+          let promptText = item.prompt;
+          if (!selfieVarBlockFace) {
+            promptText = promptText.replace(" Mirror selfie style, phone covering face.", "");
+          }
+
+          let finalPrompt = `Change pose to: ${promptText}. `;
+          if (selfieVarBlockFace) {
+             finalPrompt += "Ensure the phone covers the face (mirror selfie style). ";
+          } else {
+             finalPrompt += "Ensure the face is clearly visible, not blocked by the phone. ";
+          }
+          
+          if (selfieVarOnlyStanding) {
+             finalPrompt += "Focus on unique hand gestures and arm placements while standing. ";
+          }
+
+          finalPrompt += "Maintain clothes and background identity. High quality photorealistic.";
           
           const imageUrl = await generateImageEdit(
             selfieSourceImage.base64,
             selfieSourceImage.mimeType,
-            prompt,
+            finalPrompt,
             commonApiConfig
           );
 
           setSelfieResults(prev => prev.map(r => 
-            r.templateIndex === index 
+            r.id === item.id 
               ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
               : r
           ));
         } catch (error: any) {
            setSelfieResults(prev => prev.map(r => 
-            r.templateIndex === index 
+            r.id === item.id 
               ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
               : r
           ));
@@ -510,37 +547,139 @@ const App: React.FC = () => {
     }
   };
 
-  const retrySelfieVariation = async (index: number) => {
+  const retrySelfieVariation = async (id: string) => {
     if (!selfieSourceImage) return;
 
-    // Select a new random prompt for retry to give variety
-    const template = SELFIE_TEMPLATES[index];
-    const newRandomPrompt = template.prompts[Math.floor(Math.random() * template.prompts.length)];
+    const item = selfieResults.find(r => r.id === id);
+    if (!item) return;
 
     setSelfieResults(prev => prev.map(r => 
-      r.templateIndex === index 
-        ? { ...r, prompt: newRandomPrompt, result: { ...r.result, status: 'loading', error: undefined } }
+      r.id === id 
+        ? { ...r, result: { ...r.result, status: 'loading', error: undefined } }
         : r
     ));
 
     try {
-      const prompt = `Change pose to: ${newRandomPrompt}. Ensure the phone covers the face (mirror selfie style). Maintain clothes and background identity. High quality photorealistic.`;
+      const newRandomPrompt = item.prompts[Math.floor(Math.random() * item.prompts.length)];
+
+      let promptText = newRandomPrompt;
+      if (!selfieVarBlockFace) {
+        promptText = promptText.replace(" Mirror selfie style, phone covering face.", "");
+      }
+
+      let finalPrompt = `Change pose to: ${promptText}. `;
+      if (selfieVarBlockFace) {
+         finalPrompt += "Ensure the phone covers the face (mirror selfie style). ";
+      } else {
+         finalPrompt += "Ensure the face is clearly visible, not blocked by the phone. ";
+      }
       
+      if (selfieVarOnlyStanding) {
+         finalPrompt += "Focus on unique hand gestures and arm placements while standing. ";
+      }
+
+      finalPrompt += "Maintain clothes and background identity. High quality photorealistic.";
+
       const imageUrl = await generateImageEdit(
         selfieSourceImage.base64,
         selfieSourceImage.mimeType,
-        prompt,
+        finalPrompt,
         commonApiConfig
       );
 
       setSelfieResults(prev => prev.map(r => 
-        r.templateIndex === index 
-          ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
+        r.id === id 
+          ? { ...r, prompt: newRandomPrompt, result: { ...r.result, status: 'success', imageUrl } } 
           : r
       ));
     } catch (error: any) {
       setSelfieResults(prev => prev.map(r => 
-        r.templateIndex === index 
+        r.id === id 
+          ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Retry failed' } } 
+          : r
+      ));
+    }
+  };
+
+  // --- Batch Try-on Handlers ---
+
+  const handleBatchGeneration = async () => {
+    if (batchClothingImages.length === 0 || !batchPrompt.trim()) return;
+
+    const newResults = batchClothingImages.map((_, index) => ({
+      id: `batch-tryon-${Date.now()}-${index}`,
+      sourceIndex: index,
+      result: {
+        id: `batch-tryon-${Date.now()}-${index}`,
+        poseId: 'batch-tryon',
+        status: 'loading' as const
+      }
+    }));
+
+    setBatchResults(newResults);
+    setIsProcessing(true);
+
+    try {
+      // Process in chunks of 3 to balance speed and rate limits
+      const chunkSize = 3;
+      for (let i = 0; i < newResults.length; i += chunkSize) {
+        const chunk = newResults.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async (item) => {
+          try {
+            const clothingImage = batchClothingImages[item.sourceIndex];
+            const imageUrl = await generateImageWithReference(
+              clothingImage.base64,
+              clothingImage.mimeType,
+              batchPrompt,
+              commonApiConfig
+            );
+
+            setBatchResults(prev => prev.map(r => 
+              r.id === item.id 
+                ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
+                : r
+            ));
+          } catch (error: any) {
+            setBatchResults(prev => prev.map(r => 
+              r.id === item.id 
+                ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
+                : r
+            ));
+          }
+        }));
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const retryBatchGeneration = async (id: string) => {
+    const item = batchResults.find(r => r.id === id);
+    if (!item) return;
+
+    setBatchResults(prev => prev.map(r => 
+      r.id === id 
+        ? { ...r, result: { ...r.result, status: 'loading', error: undefined } }
+        : r
+    ));
+
+    try {
+      const clothingImage = batchClothingImages[item.sourceIndex];
+      const imageUrl = await generateImageWithReference(
+        clothingImage.base64,
+        clothingImage.mimeType,
+        batchPrompt,
+        commonApiConfig
+      );
+
+      setBatchResults(prev => prev.map(r => 
+        r.id === id 
+          ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
+          : r
+      ));
+    } catch (error: any) {
+      setBatchResults(prev => prev.map(r => 
+        r.id === id 
           ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Retry failed' } } 
           : r
       ));
@@ -842,7 +981,7 @@ Task:
                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
                   <div>
                     <div className="font-semibold text-slate-800">启用自定义 API 节点</div>
-                    <div className="text-xs text-slate-500 mt-0.5">使用 Vectorengine 或其他代理</div>
+                    <div className="text-xs text-slate-500 mt-0.5">使用 <a href="https://guojianapi.com" className="text-blue" target="_blank">郭减api</a> 或其他代理</div>
                   </div>
                   <button 
                     onClick={() => setUseCustomApi(!useCustomApi)}
@@ -854,18 +993,7 @@ Task:
 
                 {useCustomApi && (
                   <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
-                        <Globe size={14} className="text-slate-400" /> Base URL
-                      </label>
-                      <input 
-                        type="text"
-                        value={customBaseUrl}
-                        onChange={(e) => setCustomBaseUrl(e.target.value)}
-                        placeholder="https://api.vectorengine.ai"
-                        className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-mono"
-                      />
-                    </div>
+                    
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
                         <Key size={14} className="text-slate-400" /> API Key
@@ -961,6 +1089,17 @@ Task:
                 >
                     <Wand2 size={18} />
                     魔法编辑
+                </button>
+                <button
+                    onClick={() => setActiveTab('batch_tryon')}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-sm transition-all whitespace-nowrap ${
+                    activeTab === 'batch_tryon' 
+                        ? 'bg-pink-50 text-pink-700 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                    }`}
+                >
+                    <Layers size={18} />
+                    批量换装自拍
                 </button>
             </div>
 
@@ -1189,6 +1328,51 @@ Task:
                         />
                         
                         {selfieSourceImage && (
+                            <div className="mt-6 space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <h3 className="text-sm font-bold text-slate-700">生成选项</h3>
+                                
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm text-slate-600 flex items-center gap-2 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selfieVarOnlyStanding}
+                                            onChange={(e) => setSelfieVarOnlyStanding(e.target.checked)}
+                                            className="rounded text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        只生成不同的站姿和手势
+                                    </label>
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm text-slate-600 flex items-center gap-2 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selfieVarBlockFace}
+                                            onChange={(e) => setSelfieVarBlockFace(e.target.checked)}
+                                            className="rounded text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        手机全程挡脸
+                                    </label>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <div className="flex justify-between text-sm text-slate-600">
+                                        <span>生成数量</span>
+                                        <span className="font-medium">{selfieVarCount} 张</span>
+                                    </div>
+                                    <input 
+                                        type="range" 
+                                        min="1" 
+                                        max="8" 
+                                        value={selfieVarCount}
+                                        onChange={(e) => setSelfieVarCount(parseInt(e.target.value))}
+                                        className="w-full accent-indigo-600"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                        
+                        {selfieSourceImage && (
                              <div className="mt-6 flex justify-center animate-in fade-in slide-in-from-bottom-2">
                                 <Button 
                                     onClick={handleSelfieVariationsGeneration} 
@@ -1196,7 +1380,7 @@ Task:
                                     className="px-10 py-3 text-lg bg-indigo-600 hover:bg-indigo-700 shadow-lg hover:shadow-indigo-200/50"
                                 >
                                     <Sparkles size={20} />
-                                    一键生成 8 张自拍变体
+                                    一键生成 {selfieVarCount} 张自拍变体
                                 </Button>
                             </div>
                         )}
@@ -1210,16 +1394,15 @@ Task:
                             </h3>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 {selfieResults.map((item, idx) => {
-                                    const { result, templateIndex } = item;
-                                    const template = SELFIE_TEMPLATES[templateIndex];
+                                    const { result, templateLabel } = item;
 
                                     return (
-                                        <div key={idx} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col group">
+                                        <div key={item.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col group">
                                             {/* Header */}
                                             <div className="p-2 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                                                <span className="text-xs font-medium text-slate-600">{template.label}</span>
+                                                <span className="text-xs font-medium text-slate-600">{templateLabel}</span>
                                                 <button 
-                                                    onClick={() => retrySelfieVariation(idx)}
+                                                    onClick={() => retrySelfieVariation(item.id)}
                                                     disabled={result.status === 'loading'}
                                                     className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white rounded transition-colors disabled:opacity-50"
                                                     title="重新生成这张"
@@ -1244,7 +1427,7 @@ Task:
                                                         <img 
                                                             src={result.imageUrl} 
                                                             className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
-                                                            alt={template.label} 
+                                                            alt={templateLabel} 
                                                             onClick={() => setViewImageUrl(result.imageUrl!)}
                                                         />
                                                         {/* Hover Actions */}
@@ -1725,6 +1908,189 @@ Task:
                                                         </>
                                                     )}
                                                 </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                         </div>
+                    )}
+                </div>
+            )}
+            {/* 7. BATCH TRY-ON */}
+            {activeTab === 'batch_tryon' && (
+                <div className="space-y-8 max-w-5xl mx-auto">
+                    <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                        <div className="text-center mb-6">
+                            <div className="inline-flex justify-center items-center w-12 h-12 bg-pink-100 text-pink-600 rounded-full mb-3">
+                                <Layers size={24} />
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-800">批量换装自拍</h2>
+                            <p className="text-slate-500 text-sm mt-1">上传多张服装图片并输入提示词，一键生成多张自拍变体。</p>
+                        </div>
+                        
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium text-slate-700 mb-2">生成提示词</label>
+                            <textarea
+                                value={batchPrompt}
+                                onChange={(e) => setBatchPrompt(e.target.value)}
+                                className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-shadow resize-none"
+                                rows={3}
+                                placeholder="例如：一个人穿着参考图的所有服装站在镜子前自拍"
+                            />
+                        </div>
+
+                        <BatchImageUploader 
+                            currentImages={batchClothingImages} 
+                            onImagesSelected={(imgs) => {
+                                setBatchClothingImages(imgs);
+                                setBatchResults([]);
+                            }}
+                            maxImages={20}
+                            title="批量上传服装图片"
+                            subtitle="支持多选，最多 20 张"
+                        />
+                        
+                        {batchClothingImages.length > 0 && (
+                             <div className="mt-6 flex justify-center animate-in fade-in slide-in-from-bottom-2">
+                                <Button 
+                                    onClick={handleBatchGeneration} 
+                                    isLoading={isProcessing}
+                                    disabled={!batchPrompt.trim()}
+                                    className="px-10 py-3 text-lg bg-pink-600 hover:bg-pink-700 shadow-lg hover:shadow-pink-200/50"
+                                >
+                                    <Sparkles size={20} />
+                                    一键生成 {batchClothingImages.length} 张换装自拍
+                                </Button>
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Results for Batch Try-on */}
+                    {batchResults.length > 0 && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
+                            <div className="flex justify-between items-center px-1">
+                                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                    生成结果
+                                </h3>
+                                <button 
+                                    onClick={() => downloadAll(batchResults.map(r => r.result.imageUrl).filter(Boolean) as string[], 'batch-tryon')}
+                                    className="flex items-center gap-2 px-4 py-2 bg-pink-100 text-pink-700 rounded-lg font-medium hover:bg-pink-200 transition-colors text-sm"
+                                >
+                                    <Download size={16} />
+                                    一键下载全部
+                                </button>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {batchResults.map((item, idx) => {
+                                    const { result, sourceIndex } = item;
+                                    const clothingImg = batchClothingImages[sourceIndex];
+
+                                    return (
+                                        <div key={item.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col group">
+                                            {/* Header */}
+                                            <div className="p-2 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                                                <span className="text-xs font-medium text-slate-600">服装 {sourceIndex + 1}</span>
+                                                <button 
+                                                    onClick={() => retryBatchGeneration(item.id)}
+                                                    disabled={result.status === 'loading'}
+                                                    className="p-1 text-slate-400 hover:text-pink-600 hover:bg-white rounded transition-colors disabled:opacity-50"
+                                                    title="重新生成这张"
+                                                >
+                                                    <RefreshCw size={14} className={result.status === 'loading' ? 'animate-spin' : ''} />
+                                                </button>
+                                            </div>
+
+                                            {/* Reference Clothing Image (Small Thumbnail) */}
+                                            <div className="absolute top-10 left-2 w-12 h-16 rounded shadow-md border border-white overflow-hidden z-10 opacity-80 hover:opacity-100 transition-opacity">
+                                                <img 
+                                                    src={`data:${clothingImg.mimeType};base64,${clothingImg.base64}`} 
+                                                    className="w-full h-full object-cover" 
+                                                    alt="Clothing Ref" 
+                                                />
+                                            </div>
+
+                                            {/* Image Area */}
+                                            <div className="relative aspect-[3/4] bg-slate-50 flex items-center justify-center overflow-hidden">
+                                                {result.status === 'loading' && (
+                                                    <div className="w-6 h-6 border-2 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
+                                                )}
+                                                {result.status === 'error' && (
+                                                    <div className="text-red-400 text-xs text-center p-2">
+                                                        <AlertCircle size={16} className="mx-auto mb-1" />
+                                                        失败
+                                                    </div>
+                                                )}
+                                                {result.status === 'success' && result.imageUrl && (
+                                                    <>
+                                                        <img 
+                                                            src={result.imageUrl} 
+                                                            className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
+                                                            alt={`Try-on ${sourceIndex + 1}`} 
+                                                            onClick={() => setViewImageUrl(result.imageUrl!)}
+                                                        />
+                                                        {/* Hover Actions */}
+                                                        <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button 
+                                                                className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setViewImageUrl(result.imageUrl!);
+                                                                }}
+                                                                title="放大查看"
+                                                            >
+                                                                <ZoomIn size={14} />
+                                                            </button>
+                                                            <button 
+                                                                className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    // Send to Pose Transfer
+                                                                    const dataUrl = result.imageUrl!;
+                                                                    const mimeType = dataUrl.split(';')[0].split(':')[1] || 'image/png';
+                                                                    const base64 = dataUrl.split(',')[1] || '';
+                                                                    
+                                                                    setPoseTransferBaseImage({
+                                                                        mimeType,
+                                                                        base64
+                                                                    });
+                                                                    setActiveTab('pose_transfer');
+                                                                }}
+                                                                title="发送到姿势迁移"
+                                                            >
+                                                                <ArrowRight size={14} />
+                                                            </button>
+                                                            <button 
+                                                                className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    // Send to Same Pose
+                                                                    const dataUrl = result.imageUrl!;
+                                                                    const mimeType = dataUrl.split(';')[0].split(':')[1] || 'image/png';
+                                                                    const base64 = dataUrl.split(',')[1] || '';
+                                                                    
+                                                                    setSamePoseSourceImage({
+                                                                        mimeType,
+                                                                        base64
+                                                                    });
+                                                                    setActiveTab('same_pose');
+                                                                }}
+                                                                title="发送到同姿势变体"
+                                                            >
+                                                                <Copy size={14} />
+                                                            </button>
+                                                            <a 
+                                                                href={result.imageUrl}
+                                                                download={`batch-tryon-${sourceIndex}.png`}
+                                                                className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                <Download size={14} />
+                                                            </a>
+                                                        </div>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     );

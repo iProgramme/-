@@ -6,12 +6,16 @@ interface BatchImageUploaderProps {
   onImagesSelected: (images: UploadedImage[]) => void;
   currentImages: UploadedImage[];
   maxImages?: number;
+  title?: string;
+  subtitle?: string;
 }
 
 export const BatchImageUploader: React.FC<BatchImageUploaderProps> = ({ 
   onImagesSelected, 
   currentImages,
-  maxImages = 30
+  maxImages = 30,
+  title = "批量上传对镜自拍图",
+  subtitle
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -99,8 +103,8 @@ export const BatchImageUploader: React.FC<BatchImageUploaderProps> = ({
             <Upload size={24} />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-slate-700">批量上传对镜自拍图</h3>
-            <p className="text-slate-500 text-sm">支持多选，最多 {maxImages} 张</p>
+            <h3 className="text-lg font-semibold text-slate-700">{title}</h3>
+            <p className="text-slate-500 text-sm">{subtitle || `支持多选，最多 ${maxImages} 张`}</p>
           </div>
         </div>
       </div>
