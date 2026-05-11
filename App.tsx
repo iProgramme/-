@@ -9,6 +9,8 @@ import { ResultGrid } from './components/ResultGrid';
 import { MagicEditor } from './components/MagicEditor';
 import { ImageModal } from './components/ImageModal';
 import { Button } from './components/Button';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 import { Layers, Wand2, Sparkles, AlertTriangle, AlertCircle, Settings, X, Check, Globe, Key, Smartphone, ArrowRight, Download, ZoomIn, RefreshCw, Hash, Camera, Copy, Monitor, Zap, Box, Shirt } from 'lucide-react';
 
 // Selfie Variations Templates (Single Image -> 8 Variations)
@@ -171,9 +173,10 @@ const App: React.FC = () => {
   const [batchResults, setBatchResults] = useState<{id: string, sourceIndex: number, result: GenerationResult}[]>([]);
 
   // Selfie Variation State (New Tab)
-  const [selfieSourceImage, setSelfieSourceImage] = useState<UploadedImage | null>(null);
+  const [selfieSourceImages, setSelfieSourceImages] = useState<UploadedImage[]>([]);
   const [selfieResults, setSelfieResults] = useState<{
     id: string;
+    sourceIndex: number;
     templateLabel: string;
     prompts: string[];
     result: GenerationResult;
@@ -218,8 +221,8 @@ const App: React.FC = () => {
   // Model Selection State
   // 'gemini-2.5-flash-image' = Nano Banana 1
   // 'gemini-3-pro-image-preview' = Nano Banana 2
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash-image');
-  const [selectedResolution, setSelectedResolution] = useState<'1K' | '2K' | '4K'>('1K');
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3-pro-image-preview');
+  const [selectedResolution, setSelectedResolution] = useState<'1K' | '2K' | '4K'>('2K');
 
   useEffect(() => {
     localStorage.setItem('useCustomApi', useCustomApi.toString());
@@ -248,6 +251,56 @@ const App: React.FC = () => {
   };
 
   // --- Single Image Handlers ---
+
+  // --- Zip Download Helper ---
+  const downloadResultsAsZip = async (
+    results: { imageUrl?: string; status: string; originalImage?: UploadedImage; groupName?: string; name: string }[],
+    zipFileName: string
+  ) => {
+    const zip = new JSZip();
+    
+    // Group results if groupName is provided
+    const groups: Record<string, typeof results> = {};
+    results.forEach(r => {
+      if (r.status === 'success' && r.imageUrl) {
+        const group = r.groupName || 'images';
+        if (!groups[group]) groups[group] = [];
+        groups[group].push(r);
+      }
+    });
+
+    const fetchImage = async (url: string) => {
+      const response = await fetch(url);
+      return await response.blob();
+    };
+
+    // Add original images to groups if available
+    const processedGroups = new Set<string>();
+    
+    for (const r of results) {
+       if (r.status === 'success' && r.imageUrl && r.groupName) {
+         if (!processedGroups.has(r.groupName)) {
+           processedGroups.add(r.groupName);
+           // Find the first result in this group to get original image
+           const original = results.find(item => item.groupName === r.groupName)?.originalImage;
+           if (original) {
+             const blob = await fetch(`data:${original.mimeType};base64,${original.base64}`).then(res => res.blob());
+             zip.file(`${r.groupName}/original.png`, blob);
+           }
+         }
+         
+         const blob = await fetchImage(r.imageUrl);
+         zip.file(`${r.groupName}/${r.name}.png`, blob);
+       } else if (r.status === 'success' && r.imageUrl) {
+         // Flat list if no grouping
+         const blob = await fetchImage(r.imageUrl);
+         zip.file(`${r.name}.png`, blob);
+       }
+    }
+
+    const content = await zip.generateAsync({ type: 'blob' });
+    saveAs(content, `${zipFileName}.zip`);
+  };
 
   const handlePoseGeneration = async () => {
     if (!sourceImage || !selectedPose) return;
@@ -473,83 +526,103 @@ const App: React.FC = () => {
   };
 
   const handleSelfieVariationsGeneration = async () => {
-    if (!selfieSourceImage) return;
+    if (selfieSourceImages.length === 0) return;
 
     const availableTemplates = selfieVarOnlyStanding 
       ? SELFIE_TEMPLATES.filter(t => t.label.includes('站姿'))
       : SELFIE_TEMPLATES;
 
-    const newResults = Array.from({ length: selfieVarCount }).map((_, index) => {
-      const templateIndex = index % availableTemplates.length;
-      const template = availableTemplates[templateIndex];
-      const randomPrompt = template.prompts[Math.floor(Math.random() * template.prompts.length)];
-      const id = `selfie-var-${Date.now()}-${index}`;
-      
-      return {
-        id,
-        templateLabel: template.label,
-        prompts: template.prompts,
-        prompt: randomPrompt,
-        result: {
+    const allNewResults: typeof selfieResults = [];
+
+    selfieSourceImages.forEach((sourceImg, sourceIdx) => {
+      Array.from({ length: 8 }).forEach((_, index) => {
+        const templateIndex = index % availableTemplates.length;
+        const template = availableTemplates[templateIndex];
+        const randomPrompt = template.prompts[Math.floor(Math.random() * template.prompts.length)];
+        const id = `selfie-var-${Date.now()}-${sourceIdx}-${index}`;
+        
+        allNewResults.push({
           id,
-          poseId: 'selfie-var',
-          status: 'loading' as const
-        }
-      };
+          sourceIndex: sourceIdx,
+          templateLabel: template.label,
+          prompts: template.prompts,
+          prompt: randomPrompt,
+          result: {
+            id,
+            poseId: 'selfie-var',
+            status: 'loading' as const
+          }
+        });
+      });
     });
 
-    setSelfieResults(newResults);
+    setSelfieResults(allNewResults);
     setIsProcessing(true);
 
     try {
-      await Promise.all(newResults.map(async (item) => {
-        try {
-          let promptText = item.prompt;
-          if (!selfieVarBlockFace) {
-            promptText = promptText.replace(" Mirror selfie style, phone covering face.", "");
-          }
+      // Process in small chunks to avoid overload
+      const chunkSize = 3;
+      for (let i = 0; i < allNewResults.length; i += chunkSize) {
+        const chunk = allNewResults.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async (item) => {
+          let retryCount = 0;
+          const maxRetries = 3;
+          let success = false;
 
-          let finalPrompt = `Change pose to: ${promptText}. `;
-          if (selfieVarBlockFace) {
-             finalPrompt += "Ensure the phone covers the face (mirror selfie style). ";
-          } else {
-             finalPrompt += "Ensure the face is clearly visible, not blocked by the phone. ";
-          }
-          
-          if (selfieVarOnlyStanding) {
-             finalPrompt += "Focus on unique hand gestures and arm placements while standing. ";
-          }
+          while (retryCount <= maxRetries && !success) {
+            try {
+              let promptText = item.prompt;
+              if (!selfieVarBlockFace) {
+                promptText = promptText.replace(" Mirror selfie style, phone covering face.", "");
+              }
 
-          finalPrompt += "Maintain clothes and background identity. High quality photorealistic.";
-          
-          const imageUrl = await generateImageEdit(
-            selfieSourceImage.base64,
-            selfieSourceImage.mimeType,
-            finalPrompt,
-            commonApiConfig
-          );
+              let finalPrompt = `Change pose to: ${promptText}. `;
+              if (selfieVarBlockFace) {
+                 finalPrompt += "Ensure the phone covers the face (mirror selfie style). ";
+              } else {
+                 finalPrompt += "Ensure the face is clearly visible, not blocked by the phone. ";
+              }
+              
+              if (selfieVarOnlyStanding) {
+                 finalPrompt += "Focus on unique hand gestures and arm placements while standing. ";
+              }
 
-          setSelfieResults(prev => prev.map(r => 
-            r.id === item.id 
-              ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
-              : r
-          ));
-        } catch (error: any) {
-           setSelfieResults(prev => prev.map(r => 
-            r.id === item.id 
-              ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
-              : r
-          ));
-        }
-      }));
+              finalPrompt += "Maintain clothes and background identity. High quality photorealistic.";
+              
+              const sourceImage = selfieSourceImages[item.sourceIndex];
+              const imageUrl = await generateImageEdit(
+                sourceImage.base64,
+                sourceImage.mimeType,
+                finalPrompt,
+                commonApiConfig
+              );
+
+              setSelfieResults(prev => prev.map(r => 
+                r.id === item.id 
+                  ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
+                  : r
+              ));
+              success = true;
+            } catch (error: any) {
+              retryCount++;
+              if (retryCount > maxRetries) {
+                setSelfieResults(prev => prev.map(r => 
+                  r.id === item.id 
+                    ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
+                    : r
+                ));
+              }
+              if (!success && retryCount <= maxRetries) await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+        }));
+      }
     } finally {
       setIsProcessing(false);
     }
   };
 
   const retrySelfieVariation = async (id: string) => {
-    if (!selfieSourceImage) return;
-
     const item = selfieResults.find(r => r.id === id);
     if (!item) return;
 
@@ -560,6 +633,7 @@ const App: React.FC = () => {
     ));
 
     try {
+      const sourceImage = selfieSourceImages[item.sourceIndex];
       const newRandomPrompt = item.prompts[Math.floor(Math.random() * item.prompts.length)];
 
       let promptText = newRandomPrompt;
@@ -581,8 +655,8 @@ const App: React.FC = () => {
       finalPrompt += "Maintain clothes and background identity. High quality photorealistic.";
 
       const imageUrl = await generateImageEdit(
-        selfieSourceImage.base64,
-        selfieSourceImage.mimeType,
+        sourceImage.base64,
+        sourceImage.mimeType,
         finalPrompt,
         commonApiConfig
       );
@@ -599,6 +673,21 @@ const App: React.FC = () => {
           : r
       ));
     }
+  };
+
+  const downloadAllSelfieResults = async () => {
+    const downloadData = selfieResults
+      .filter(r => r.result.status === 'success' && r.result.imageUrl)
+      .map(r => ({
+        imageUrl: r.result.imageUrl,
+        status: r.result.status,
+        originalImage: selfieSourceImages[r.sourceIndex],
+        groupName: `image_${r.sourceIndex + 1}`,
+        name: `variation_${r.templateLabel.replace(/\s+/g, '_')}`
+      }));
+    
+    if (downloadData.length === 0) return;
+    await downloadResultsAsZip(downloadData, 'selfie_variations');
   };
 
   // --- Batch Try-on Handlers ---
@@ -782,12 +871,8 @@ const App: React.FC = () => {
     if (!tryOnModelImage || tryOnClothingImages.length === 0) return;
 
     const newResults = tryOnClothingImages.map((_, index) => {
-      // Randomly select a stocking image if available
-      // Logic: If stockings are uploaded, 50% chance to pick one, or pick one randomly from the list + 'none' option?
-      // User requirement: "randomly select a stocking or not select one"
       let stockingIndex: number | undefined = undefined;
       if (tryOnStockingImages.length > 0) {
-        // Create a pool of indices: -1 (none) and 0 to length-1
         const pool = [-1, ...Array.from({ length: tryOnStockingImages.length }, (_, i) => i)];
         const selected = pool[Math.floor(Math.random() * pool.length)];
         if (selected !== -1) {
@@ -810,14 +895,22 @@ const App: React.FC = () => {
     setIsProcessing(true);
 
     try {
-      await Promise.all(newResults.map(async (item, index) => {
-        try {
-          const clothingImg = tryOnClothingImages[index];
-          const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
-          
-          let prompt = TRYON_PROMPT;
-          if (stockingImg) {
-            prompt = `You are an expert AI fashion stylist and photographer.
+      const chunkSize = 3;
+      for (let i = 0; i < newResults.length; i += chunkSize) {
+        const chunk = newResults.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async (item) => {
+          let retryCount = 0;
+          const maxRetries = 3;
+          let success = false;
+
+          while (retryCount <= maxRetries && !success) {
+            try {
+              const clothingImg = tryOnClothingImages[item.sourceIndex];
+              const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
+              
+              let prompt = TRYON_PROMPT;
+              if (stockingImg) {
+                prompt = `You are an expert AI fashion stylist and photographer.
 
 Input 1: An image of a clothing product (garment).
 Input 2: An image of a model standing in a scene.
@@ -834,35 +927,55 @@ Task:
 8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
 9. Ensure high fidelity for the clothing and stockings texture and fit.
 9:16`;
+              }
+
+              const imageUrl = await generateTryOn(
+                tryOnModelImage.base64,
+                tryOnModelImage.mimeType,
+                clothingImg.base64,
+                clothingImg.mimeType,
+                prompt,
+                commonApiConfig,
+                stockingImg?.base64,
+                stockingImg?.mimeType
+              );
+
+              setTryOnResults(prev => prev.map(r => 
+                r.sourceIndex === item.sourceIndex 
+                  ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
+                  : r
+              ));
+              success = true;
+            } catch (error: any) {
+              retryCount++;
+              if (retryCount > maxRetries) {
+                setTryOnResults(prev => prev.map(r => 
+                  r.sourceIndex === item.sourceIndex 
+                    ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
+                    : r
+                ));
+              }
+              if (!success && retryCount <= maxRetries) await new Promise(resolve => setTimeout(resolve, 1000));
+            }
           }
-
-          const imageUrl = await generateTryOn(
-            tryOnModelImage.base64,
-            tryOnModelImage.mimeType,
-            clothingImg.base64,
-            clothingImg.mimeType,
-            prompt,
-            commonApiConfig,
-            stockingImg?.base64,
-            stockingImg?.mimeType
-          );
-
-          setTryOnResults(prev => prev.map(r => 
-            r.sourceIndex === index 
-              ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
-              : r
-          ));
-        } catch (error: any) {
-           setTryOnResults(prev => prev.map(r => 
-            r.sourceIndex === index 
-              ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
-              : r
-          ));
-        }
-      }));
+        }));
+      }
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const downloadAllTryOnResults = async () => {
+    const downloadData = tryOnResults
+      .filter(r => r.result.status === 'success' && r.result.imageUrl)
+      .map((r, i) => ({
+        imageUrl: r.result.imageUrl,
+        status: r.result.status,
+        name: `tryon_clothing_${r.sourceIndex + 1}`
+      }));
+    
+    if (downloadData.length === 0) return;
+    await downloadResultsAsZip(downloadData, 'try_on_results');
   };
 
   const handleRetryTryOnImage = async (index: number) => {
@@ -1316,18 +1429,23 @@ Task:
                                 <Camera size={24} />
                             </div>
                             <h2 className="text-xl font-bold text-slate-800">自拍变身模式</h2>
-                            <p className="text-slate-500 text-sm mt-1">上传一张图片，AI 自动生成 2张坐姿 + 2张跪姿 + 2张蹲姿 + 2张站姿（共8张），并全程保持手机挡脸。</p>
+                            <p className="text-slate-500 text-sm mt-1">上传多张图片（最多50张），AI 为每一张图自动生成 2张坐姿 + 2张跪姿 + 2张蹲姿 + 2张站姿（共8张变体），并全程保持手机挡脸。</p>
                         </div>
                         
-                        <ImageUploader 
-                            currentImage={selfieSourceImage} 
-                            onImageSelected={(img) => {
-                                setSelfieSourceImage(img);
-                                setSelfieResults([]);
-                            }} 
-                        />
+                        <div className="space-y-6 text-left">
+                           <BatchImageUploader 
+                                currentImages={selfieSourceImages}
+                                onImagesSelected={(imgs) => {
+                                    setSelfieSourceImages(imgs);
+                                    if (imgs.length === 0) setSelfieResults([]);
+                                }}
+                                maxImages={50}
+                                title="上传自拍底图 (批量)"
+                                subtitle="上传后，每一张图都会生成8个姿势变体"
+                            />
+                        </div>
                         
-                        {selfieSourceImage && (
+                        {selfieSourceImages.length > 0 && (
                             <div className="mt-6 space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
                                 <h3 className="text-sm font-bold text-slate-700">生成选项</h3>
                                 
@@ -1354,25 +1472,10 @@ Task:
                                         手机全程挡脸
                                     </label>
                                 </div>
-
-                                <div className="space-y-2">
-                                    <div className="flex justify-between text-sm text-slate-600">
-                                        <span>生成数量</span>
-                                        <span className="font-medium">{selfieVarCount} 张</span>
-                                    </div>
-                                    <input 
-                                        type="range" 
-                                        min="1" 
-                                        max="8" 
-                                        value={selfieVarCount}
-                                        onChange={(e) => setSelfieVarCount(parseInt(e.target.value))}
-                                        className="w-full accent-indigo-600"
-                                    />
-                                </div>
                             </div>
                         )}
                         
-                        {selfieSourceImage && (
+                        {selfieSourceImages.length > 0 && (
                              <div className="mt-6 flex justify-center animate-in fade-in slide-in-from-bottom-2">
                                 <Button 
                                     onClick={handleSelfieVariationsGeneration} 
@@ -1380,7 +1483,7 @@ Task:
                                     className="px-10 py-3 text-lg bg-indigo-600 hover:bg-indigo-700 shadow-lg hover:shadow-indigo-200/50"
                                 >
                                     <Sparkles size={20} />
-                                    一键生成 {selfieVarCount} 张自拍变体
+                                    一键生成 {selfieSourceImages.length * 8} 张自拍变体
                                 </Button>
                             </div>
                         )}
@@ -1389,18 +1492,27 @@ Task:
                     {/* Results for Selfie Variations */}
                     {selfieResults.length > 0 && (
                         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 px-1">
-                                变身结果
-                            </h3>
+                            <div className="flex justify-between items-center px-1">
+                                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                    变身结果
+                                </h3>
+                                <button 
+                                    onClick={downloadAllSelfieResults}
+                                    className="flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg font-medium hover:bg-indigo-200 transition-colors text-sm"
+                                >
+                                    <Download size={16} />
+                                    一键下载全部 (含原图/文件夹分类)
+                                </button>
+                            </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 {selfieResults.map((item, idx) => {
-                                    const { result, templateLabel } = item;
+                                    const { result, templateLabel, sourceIndex } = item;
 
                                     return (
                                         <div key={item.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col group">
                                             {/* Header */}
                                             <div className="p-2 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                                                <span className="text-xs font-medium text-slate-600">{templateLabel}</span>
+                                                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">图 {sourceIndex + 1} - {templateLabel}</span>
                                                 <button 
                                                     onClick={() => retrySelfieVariation(item.id)}
                                                     disabled={result.status === 'loading'}
@@ -1417,9 +1529,9 @@ Task:
                                                     <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
                                                 )}
                                                 {result.status === 'error' && (
-                                                    <div className="text-red-400 text-xs text-center p-2">
+                                                    <div className="text-red-400 text-[10px] text-center p-2">
                                                         <AlertCircle size={16} className="mx-auto mb-1" />
-                                                        失败
+                                                        生成失败
                                                     </div>
                                                 )}
                                                 {result.status === 'success' && result.imageUrl && (
@@ -1440,7 +1552,7 @@ Task:
                                                             </button>
                                                             <a 
                                                                 href={result.imageUrl}
-                                                                download={`selfie-var-${templateIndex}.png`}
+                                                                download={`selfie-var-${sourceIndex}-${idx}.png`}
                                                                 className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
                                                             >
                                                                 <Download size={14} />
@@ -1584,7 +1696,7 @@ Task:
                             <Shirt size={32} />
                         </div>
                         <h2 className="text-2xl font-bold text-slate-800 mb-2">模特换装</h2>
-                        <p className="text-slate-500 mb-6">先上传一张模特图，再上传多张衣服平铺图（1-30张），AI 将自动把衣服穿到模特身上。</p>
+                        <p className="text-slate-500 mb-6">先上传一张模特图，再上传多张衣服平铺图（1-50张），AI 将自动把衣服穿到模特身上。</p>
                         
                         <div className="space-y-6 text-left">
                             <div>
@@ -1612,7 +1724,7 @@ Task:
                                             setTryOnClothingImages(imgs);
                                             if (imgs.length === 0) setTryOnResults([]);
                                         }}
-                                        maxImages={30}
+                                        maxImages={50}
                                     />
                                 </div>
                             )}
@@ -1629,7 +1741,7 @@ Task:
                                         onImagesSelected={(imgs) => {
                                             setTryOnStockingImages(imgs);
                                         }}
-                                        maxImages={30}
+                                        maxImages={50}
                                     />
                                 </div>
                             )}
@@ -1652,7 +1764,16 @@ Task:
                     {/* Results Grid for Try On */}
                     {tryOnResults.length > 0 && (
                          <div className="space-y-6">
-                            <h3 className="text-xl font-bold text-slate-800 px-4">生成结果列表</h3>
+                            <div className="flex justify-between items-center px-4">
+                                <h3 className="text-xl font-bold text-slate-800">生成结果列表</h3>
+                                <button 
+                                    onClick={downloadAllTryOnResults}
+                                    className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 rounded-lg font-medium hover:bg-orange-200 transition-colors text-sm"
+                                >
+                                    <Download size={16} />
+                                    一键下载全部
+                                </button>
+                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
                                 {tryOnResults.map((item, idx) => {
                                     const clothingImg = tryOnClothingImages[item.sourceIndex];
