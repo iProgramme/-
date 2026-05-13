@@ -221,7 +221,8 @@ const App: React.FC = () => {
   // Model Selection State
   // 'gemini-2.5-flash-image' = Nano Banana 1
   // 'gemini-3-pro-image-preview' = Nano Banana 2
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-3-pro-image-preview');
+  // 'gemini-3.1-flash-image-preview' = Nano Banana 3
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.1-flash-image-preview');
   const [selectedResolution, setSelectedResolution] = useState<'1K' | '2K' | '4K'>('2K');
 
   useEffect(() => {
@@ -561,7 +562,7 @@ const App: React.FC = () => {
 
     try {
       // Process in small chunks to avoid overload
-      const chunkSize = 3;
+      const chunkSize = 50;
       for (let i = 0; i < allNewResults.length; i += chunkSize) {
         const chunk = allNewResults.slice(i, i + chunkSize);
         await Promise.all(chunk.map(async (item) => {
@@ -709,8 +710,8 @@ const App: React.FC = () => {
     setIsProcessing(true);
 
     try {
-      // Process in chunks of 3 to balance speed and rate limits
-      const chunkSize = 3;
+      // Process in chunks of 50 to balance speed and rate limits
+      const chunkSize = 50;
       for (let i = 0; i < newResults.length; i += chunkSize) {
         const chunk = newResults.slice(i, i + chunkSize);
         await Promise.all(chunk.map(async (item) => {
@@ -895,7 +896,7 @@ const App: React.FC = () => {
     setIsProcessing(true);
 
     try {
-      const chunkSize = 3;
+      const chunkSize = 50;
       for (let i = 0; i < newResults.length; i += chunkSize) {
         const chunk = newResults.slice(i, i + chunkSize);
         await Promise.all(chunk.map(async (item) => {
@@ -1429,7 +1430,7 @@ Task:
                                 <Camera size={24} />
                             </div>
                             <h2 className="text-xl font-bold text-slate-800">自拍变身模式</h2>
-                            <p className="text-slate-500 text-sm mt-1">上传多张图片（最多50张），AI 为每一张图自动生成 2张坐姿 + 2张跪姿 + 2张蹲姿 + 2张站姿（共8张变体），并全程保持手机挡脸。</p>
+                            <p className="text-slate-500 text-sm mt-1">上传多张图片（最多50张），AI 为每一张图自动生成 8张不同姿势变体，并全程保持手机挡脸。支持一次最多并行生成50个，效率翻倍。</p>
                         </div>
                         
                         <div className="space-y-6 text-left">
@@ -1696,7 +1697,7 @@ Task:
                             <Shirt size={32} />
                         </div>
                         <h2 className="text-2xl font-bold text-slate-800 mb-2">模特换装</h2>
-                        <p className="text-slate-500 mb-6">先上传一张模特图，再上传多张衣服平铺图（1-50张），AI 将自动把衣服穿到模特身上。</p>
+                        <p className="text-slate-500 mb-6">先上传一张模特图，再上传多张衣服平铺图（1-50张），AI 将自动把衣服穿到模特身上。系统支持一次最多并行生成50层任务。</p>
                         
                         <div className="space-y-6 text-left">
                             <div>
@@ -1725,6 +1726,8 @@ Task:
                                             if (imgs.length === 0) setTryOnResults([]);
                                         }}
                                         maxImages={50}
+                                        title="上传衣服图 (批量)"
+                                        subtitle="支持多选，建议使用平铺图"
                                     />
                                 </div>
                             )}
@@ -1742,6 +1745,8 @@ Task:
                                             setTryOnStockingImages(imgs);
                                         }}
                                         maxImages={50}
+                                        title="上传丝袜图 (可选/批量)"
+                                        subtitle="AI 将从中随机挑选进行搭配"
                                     />
                                 </div>
                             )}
@@ -2047,7 +2052,7 @@ Task:
                                 <Layers size={24} />
                             </div>
                             <h2 className="text-xl font-bold text-slate-800">批量换装自拍</h2>
-                            <p className="text-slate-500 text-sm mt-1">上传多张服装图片并输入提示词，一键生成多张自拍变体。</p>
+                            <p className="text-slate-500 text-sm mt-1">上传多张服装图片并输入提示词，一键生成多张自拍变体。支持一次最多并行生成50个结果。</p>
                         </div>
                         
                         <div className="mb-6">

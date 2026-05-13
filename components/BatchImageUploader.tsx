@@ -14,7 +14,7 @@ export const BatchImageUploader: React.FC<BatchImageUploaderProps> = ({
   onImagesSelected, 
   currentImages,
   maxImages = 30,
-  title = "批量上传对镜自拍图",
+  title = "批量上传图片",
   subtitle
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
