@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UploadedImage, PoseType, GenerationResult } from './types';
 import { POSES, VARIATION_COUNT } from './constants';
-import { generateImageEdit, generateTryOn, generatePoseTransfer, generateImageWithReference } from './services/geminiService';
+import { generateImageEdit, generateTryOn, generatePoseTransfer, generateImageWithReference, generateTextToImage } from './services/geminiService';
 import { ImageUploader } from './components/ImageUploader';
 import { BatchImageUploader } from './components/BatchImageUploader'; // New Component
 import { PoseSelector } from './components/PoseSelector';
@@ -15,6 +15,9 @@ import { Layers, Wand2, Sparkles, AlertTriangle, AlertCircle, Settings, X, Check
 
 // Selfie Variations Templates (Single Image -> 8 Variations)
 // 2 Sitting, 2 Kneeling, 2 Squatting, 2 Standing
+import { historyDb, GenerationSession } from './db';
+import { HistoryPanel } from './components/HistoryPanel';
+
 const SELFIE_TEMPLATES = [
   { 
     label: "地板坐姿 1", 
@@ -152,7 +155,7 @@ const getImageDimensions = (base64: string, mimeType: string): Promise<{width: n
 };
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'poses' | 'same_pose' | 'selfie_var' | 'magic' | 'try_on' | 'pose_transfer' | 'batch_tryon'>('poses');
+  const [activeTab, setActiveTab] = useState<'poses' | 'same_pose' | 'selfie_var' | 'magic' | 'try_on' | 'pose_transfer' | 'batch_tryon' | 'text_to_image'>('selfie_var');
   
   // Single Image State (Pose)
   const [sourceImage, setSourceImage] = useState<UploadedImage | null>(null);
@@ -196,6 +199,12 @@ const App: React.FC = () => {
   const [poseTransferBaseImage, setPoseTransferBaseImage] = useState<UploadedImage | null>(null);
   const [poseTransferRefImages, setPoseTransferRefImages] = useState<UploadedImage[]>([]);
   const [poseTransferResults, setPoseTransferResults] = useState<{sourceIndex: number, result: GenerationResult}[]>([]);
+  
+  // Text to Image States
+  const [textToImagePrompt, setTextToImagePrompt] = useState('');
+  const [textToImageRefImage, setTextToImageRefImage] = useState<UploadedImage | null>(null);
+  const [textToImageCount, setTextToImageCount] = useState<number>(4);
+  const [textToImageResults, setTextToImageResults] = useState<{id: string, result: GenerationResult}[]>([]);
 
   const [selectedPose, setSelectedPose] = useState<PoseType | null>(null);
   const [customPoseInput, setCustomPoseInput] = useState('');
@@ -204,10 +213,14 @@ const App: React.FC = () => {
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
+  const [progressCount, setProgressCount] = useState(0);
+  const [progressTotal, setProgressTotal] = useState(0);
+  const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [apiKeyError, setApiKeyError] = useState(false);
   
   // Settings state
   const [showSettings, setShowSettings] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [useCustomApi, setUseCustomApi] = useState(() => {
     return localStorage.getItem('useCustomApi') === 'true';
   });
@@ -238,6 +251,23 @@ const App: React.FC = () => {
       setApiKeyError(false);
     }
   }, [useCustomApi]);
+
+  // Auto-save history when a batch finishes or periodically during progress
+  useEffect(() => {
+    if (!isProcessing && progressTotal > 0 && progressCount === progressTotal) {
+      saveToHistory();
+    }
+  }, [isProcessing, progressCount, progressTotal]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isProcessing && progressTotal > 0) {
+      interval = setInterval(() => {
+        saveToHistory();
+      }, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [isProcessing, progressTotal]);
 
   const handleSelectPose = (poseId: PoseType) => {
     setSelectedPose(poseId);
@@ -559,6 +589,9 @@ const App: React.FC = () => {
 
     setSelfieResults(allNewResults);
     setIsProcessing(true);
+    setActiveSessionId(null);
+    setProgressCount(0);
+    setProgressTotal(allNewResults.length);
 
     try {
       // Process in small chunks to avoid overload
@@ -569,52 +602,68 @@ const App: React.FC = () => {
           let retryCount = 0;
           const maxRetries = 3;
           let success = false;
+          
+          try {
+            while (retryCount <= maxRetries && !success) {
+              try {
+                let promptText = item.prompt;
+                if (!selfieVarBlockFace) {
+                  promptText = promptText.replace(" Mirror selfie style, phone covering face.", "");
+                }
 
-          while (retryCount <= maxRetries && !success) {
-            try {
-              let promptText = item.prompt;
-              if (!selfieVarBlockFace) {
-                promptText = promptText.replace(" Mirror selfie style, phone covering face.", "");
-              }
+                let finalPrompt = `Change pose to: ${promptText}. `;
+                if (selfieVarBlockFace) {
+                  finalPrompt += "Ensure the phone covers the face (mirror selfie style). ";
+                } else {
+                  finalPrompt += "Ensure the face is clearly visible, not blocked by the phone. ";
+                }
+                
+                if (selfieVarOnlyStanding) {
+                  finalPrompt += "Focus on unique hand gestures and arm placements while standing. ";
+                }
 
-              let finalPrompt = `Change pose to: ${promptText}. `;
-              if (selfieVarBlockFace) {
-                 finalPrompt += "Ensure the phone covers the face (mirror selfie style). ";
-              } else {
-                 finalPrompt += "Ensure the face is clearly visible, not blocked by the phone. ";
-              }
-              
-              if (selfieVarOnlyStanding) {
-                 finalPrompt += "Focus on unique hand gestures and arm placements while standing. ";
-              }
+                finalPrompt += "Maintain clothes and background identity. High quality photorealistic.";
+                
+                const sourceImage = selfieSourceImages[item.sourceIndex];
+                const imageUrl = await generateImageEdit(
+                  sourceImage.base64,
+                  sourceImage.mimeType,
+                  finalPrompt,
+                  commonApiConfig
+                );
 
-              finalPrompt += "Maintain clothes and background identity. High quality photorealistic.";
-              
-              const sourceImage = selfieSourceImages[item.sourceIndex];
-              const imageUrl = await generateImageEdit(
-                sourceImage.base64,
-                sourceImage.mimeType,
-                finalPrompt,
-                commonApiConfig
-              );
-
-              setSelfieResults(prev => prev.map(r => 
-                r.id === item.id 
-                  ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
-                  : r
-              ));
-              success = true;
-            } catch (error: any) {
-              retryCount++;
-              if (retryCount > maxRetries) {
                 setSelfieResults(prev => prev.map(r => 
                   r.id === item.id 
-                    ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
+                    ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
                     : r
                 ));
+                success = true;
+              } catch (error: any) {
+                const errorMsg = error.message || '';
+                const isQuotaError = errorMsg.toLowerCase().includes('quota') || errorMsg.includes('额度');
+
+                if (isQuotaError) {
+                  setSelfieResults(prev => prev.map(r => 
+                    r.id === item.id 
+                      ? { ...r, result: { ...r.result, status: 'error', error: '额度不足 (Quota exceeded)' } } 
+                      : r
+                  ));
+                  break;
+                }
+
+                retryCount++;
+                if (retryCount > maxRetries) {
+                  setSelfieResults(prev => prev.map(r => 
+                    r.id === item.id 
+                      ? { ...r, result: { ...r.result, status: 'error', error: errorMsg || 'Generation failed' } } 
+                      : r
+                  ));
+                }
+                if (!success && retryCount <= maxRetries) await new Promise(resolve => setTimeout(resolve, 1000));
               }
-              if (!success && retryCount <= maxRetries) await new Promise(resolve => setTimeout(resolve, 1000));
             }
+          } finally {
+            setProgressCount(prev => prev + 1);
           }
         }));
       }
@@ -691,6 +740,31 @@ const App: React.FC = () => {
     await downloadResultsAsZip(downloadData, 'selfie_variations');
   };
 
+  const retryAllFailedSelfie = async () => {
+    const failedItems = selfieResults.filter(r => r.result.status === 'error');
+    if (failedItems.length === 0) return;
+    
+    setIsProcessing(true);
+    setProgressCount(0);
+    setProgressTotal(failedItems.length);
+    try {
+      // Process in chunks to be consistent with generation
+      const chunkSize = 50;
+      for (let i = 0; i < failedItems.length; i += chunkSize) {
+        const chunk = failedItems.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async (item) => {
+          try {
+            await retrySelfieVariation(item.id);
+          } finally {
+            setProgressCount(prev => prev + 1);
+          }
+        }));
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   // --- Batch Try-on Handlers ---
 
   const handleBatchGeneration = async () => {
@@ -708,6 +782,9 @@ const App: React.FC = () => {
 
     setBatchResults(newResults);
     setIsProcessing(true);
+    setActiveSessionId(null);
+    setProgressCount(0);
+    setProgressTotal(newResults.length);
 
     try {
       // Process in chunks of 50 to balance speed and rate limits
@@ -735,6 +812,8 @@ const App: React.FC = () => {
                 ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
                 : r
             ));
+          } finally {
+            setProgressCount(prev => prev + 1);
           }
         }));
       }
@@ -773,6 +852,30 @@ const App: React.FC = () => {
           ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Retry failed' } } 
           : r
       ));
+    }
+  };
+
+  const retryAllFailedBatchTryOn = async () => {
+    const failedItems = batchResults.filter(r => r.result.status === 'error');
+    if (failedItems.length === 0) return;
+
+    setIsProcessing(true);
+    setProgressCount(0);
+    setProgressTotal(failedItems.length);
+    try {
+      const chunkSize = 50;
+      for (let i = 0; i < failedItems.length; i += chunkSize) {
+        const chunk = failedItems.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async (item) => {
+          try {
+            await retryBatchGeneration(item.id);
+          } finally {
+            setProgressCount(prev => prev + 1);
+          }
+        }));
+      }
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -866,6 +969,147 @@ const App: React.FC = () => {
     }
   };
 
+  // --- Text to Image Handlers ---
+
+  const handleTextToImageGeneration = async () => {
+    if (!textToImagePrompt.trim()) return;
+
+    const newResults = Array.from({ length: textToImageCount }).map((_, i) => ({
+      id: Math.random().toString(36).substr(2, 9),
+      result: { 
+        id: i.toString(), 
+        poseId: 'prompt', 
+        status: 'loading' as const 
+      }
+    }));
+
+    setTextToImageResults(newResults);
+    setIsProcessing(true);
+    setActiveSessionId(null);
+    setProgressCount(0);
+    setProgressTotal(newResults.length);
+
+    try {
+      const chunkSize = 2; // Process in small chunks for stability
+      for (let i = 0; i < newResults.length; i += chunkSize) {
+        const chunk = newResults.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async (item) => {
+          let retryCount = 0;
+          const maxRetries = 3;
+          let success = false;
+
+          try {
+            while (retryCount <= maxRetries && !success) {
+              try {
+                const imageUrl = await generateTextToImage(
+                  textToImagePrompt,
+                  commonApiConfig,
+                  textToImageRefImage ? { base64: textToImageRefImage.base64, mimeType: textToImageRefImage.mimeType } : undefined
+                );
+
+                setTextToImageResults(prev => prev.map(r => 
+                  r.id === item.id 
+                    ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
+                    : r
+                ));
+                success = true;
+              } catch (error: any) {
+                const errorMsg = error.message || '';
+                const isQuotaError = errorMsg.toLowerCase().includes('quota') || errorMsg.includes('额度');
+
+                if (isQuotaError) {
+                  setTextToImageResults(prev => prev.map(r => 
+                    r.id === item.id 
+                      ? { ...r, result: { ...r.result, status: 'error', error: '额度不足 (Quota exceeded)' } } 
+                      : r
+                  ));
+                  break;
+                }
+
+                retryCount++;
+                if (retryCount > maxRetries) {
+                  setTextToImageResults(prev => prev.map(r => 
+                    r.id === item.id 
+                      ? { ...r, result: { ...r.result, status: 'error', error: errorMsg || 'Generation failed' } } 
+                      : r
+                  ));
+                }
+                if (!success && retryCount <= maxRetries) await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+            }
+          } finally {
+            setProgressCount(prev => prev + 1);
+          }
+        }));
+      }
+    } catch (error: any) {
+      console.error("Text to Image process failed:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const retryTextToImage = async (id: string) => {
+    const item = textToImageResults.find(r => r.id === id);
+    if (!item) return;
+
+    setTextToImageResults(prev => prev.map(r => 
+      r.id === id ? { ...r, result: { ...r.result, status: 'loading', error: undefined } } : r
+    ));
+
+    try {
+      const imageUrl = await generateTextToImage(
+        textToImagePrompt,
+        commonApiConfig,
+        textToImageRefImage ? { base64: textToImageRefImage.base64, mimeType: textToImageRefImage.mimeType } : undefined
+      );
+
+      setTextToImageResults(prev => prev.map(r => 
+        r.id === id ? { ...r, result: { ...r.result, status: 'success', imageUrl } } : r
+      ));
+    } catch (error: any) {
+      setTextToImageResults(prev => prev.map(r => 
+        r.id === id ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } : r
+      ));
+    }
+  };
+
+  const retryAllFailedTextToImage = async () => {
+    const failedItems = textToImageResults.filter(r => r.result.status === 'error');
+    if (failedItems.length === 0) return;
+
+    setIsProcessing(true);
+    setProgressCount(0);
+    setProgressTotal(failedItems.length);
+    try {
+      const chunkSize = 2;
+      for (let i = 0; i < failedItems.length; i += chunkSize) {
+        const chunk = failedItems.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async (item) => {
+          try {
+            await retryTextToImage(item.id);
+          } finally {
+            setProgressCount(prev => prev + 1);
+          }
+        }));
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const downloadAllTextToImage = async () => {
+    const downloadData = textToImageResults
+      .filter(r => r.result.status === 'success' && r.result.imageUrl)
+      .map(r => ({
+        url: r.result.imageUrl!,
+        name: `text_to_image_${r.id}.png`
+      }));
+    
+    if (downloadData.length === 0) return;
+    await downloadResultsAsZip(downloadData, 'text_to_image_results');
+  };
+
   // --- Try-On (New Tab) Handlers ---
 
   const handleTryOnGeneration = async () => {
@@ -894,6 +1138,9 @@ const App: React.FC = () => {
 
     setTryOnResults(newResults);
     setIsProcessing(true);
+    setActiveSessionId(null);
+    setProgressCount(0);
+    setProgressTotal(newResults.length);
 
     try {
       const chunkSize = 50;
@@ -904,14 +1151,15 @@ const App: React.FC = () => {
           const maxRetries = 3;
           let success = false;
 
-          while (retryCount <= maxRetries && !success) {
-            try {
-              const clothingImg = tryOnClothingImages[item.sourceIndex];
-              const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
-              
-              let prompt = TRYON_PROMPT;
-              if (stockingImg) {
-                prompt = `You are an expert AI fashion stylist and photographer.
+          try {
+            while (retryCount <= maxRetries && !success) {
+              try {
+                const clothingImg = tryOnClothingImages[item.sourceIndex];
+                const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
+                
+                let prompt = TRYON_PROMPT;
+                if (stockingImg) {
+                  prompt = `You are an expert AI fashion stylist and photographer.
 
 Input 1: An image of a clothing product (garment).
 Input 2: An image of a model standing in a scene.
@@ -928,36 +1176,51 @@ Task:
 8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
 9. Ensure high fidelity for the clothing and stockings texture and fit.
 9:16`;
-              }
+                }
 
-              const imageUrl = await generateTryOn(
-                tryOnModelImage.base64,
-                tryOnModelImage.mimeType,
-                clothingImg.base64,
-                clothingImg.mimeType,
-                prompt,
-                commonApiConfig,
-                stockingImg?.base64,
-                stockingImg?.mimeType
-              );
+                const imageUrl = await generateTryOn(
+                  tryOnModelImage.base64,
+                  tryOnModelImage.mimeType,
+                  clothingImg.base64,
+                  clothingImg.mimeType,
+                  prompt,
+                  commonApiConfig,
+                  stockingImg?.base64,
+                  stockingImg?.mimeType
+                );
 
-              setTryOnResults(prev => prev.map(r => 
-                r.sourceIndex === item.sourceIndex 
-                  ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
-                  : r
-              ));
-              success = true;
-            } catch (error: any) {
-              retryCount++;
-              if (retryCount > maxRetries) {
                 setTryOnResults(prev => prev.map(r => 
                   r.sourceIndex === item.sourceIndex 
-                    ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
+                    ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
                     : r
                 ));
+                success = true;
+              } catch (error: any) {
+                const errorMsg = error.message || '';
+                const isQuotaError = errorMsg.toLowerCase().includes('quota') || errorMsg.includes('额度');
+
+                if (isQuotaError) {
+                  setTryOnResults(prev => prev.map(r => 
+                    r.sourceIndex === item.sourceIndex 
+                      ? { ...r, result: { ...r.result, status: 'error', error: '额度不足 (Quota exceeded)' } } 
+                      : r
+                  ));
+                  break;
+                }
+
+                retryCount++;
+                if (retryCount > maxRetries) {
+                  setTryOnResults(prev => prev.map(r => 
+                    r.sourceIndex === item.sourceIndex 
+                      ? { ...r, result: { ...r.result, status: 'error', error: errorMsg || 'Generation failed' } } 
+                      : r
+                  ));
+                }
+                if (!success && retryCount <= maxRetries) await new Promise(resolve => setTimeout(resolve, 1000));
               }
-              if (!success && retryCount <= maxRetries) await new Promise(resolve => setTimeout(resolve, 1000));
             }
+          } finally {
+            setProgressCount(prev => prev + 1);
           }
         }));
       }
@@ -977,6 +1240,30 @@ Task:
     
     if (downloadData.length === 0) return;
     await downloadResultsAsZip(downloadData, 'try_on_results');
+  };
+
+  const retryAllFailedTryOn = async () => {
+    const failedItems = tryOnResults.filter(r => r.result.status === 'error');
+    if (failedItems.length === 0) return;
+
+    setIsProcessing(true);
+    setProgressCount(0);
+    setProgressTotal(failedItems.length);
+    try {
+      const chunkSize = 50;
+      for (let i = 0; i < failedItems.length; i += chunkSize) {
+        const chunk = failedItems.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async (item) => {
+          try {
+            await handleRetryTryOnImage(item.sourceIndex);
+          } finally {
+            setProgressCount(prev => prev + 1);
+          }
+        }));
+      }
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleRetryTryOnImage = async (index: number) => {
@@ -1051,8 +1338,128 @@ Task:
   };
 
 
+  const saveToHistory = async (explicitName?: string) => {
+    let data: any = {};
+    let type = activeTab;
+    let name = explicitName || '';
+
+    if (activeTab === 'selfie_var') {
+      data = {
+        selfieSourceImages,
+        results: selfieResults,
+        selfieVarOnlyStanding,
+        selfieVarBlockFace
+      };
+      if (!name) name = `自拍变身 - ${selfieResults.length}张图片`;
+    } else if (activeTab === 'try_on') {
+      data = {
+        tryOnModelImage,
+        tryOnClothingImages,
+        tryOnStockingImages,
+        results: tryOnResults
+      };
+      if (!name) name = `模特换装 - ${tryOnResults.length}组任务`;
+    } else if (activeTab === 'batch_tryon') {
+      data = {
+        batchClothingImages,
+        batchPrompt,
+        results: batchResults
+      };
+      if (!name) name = `批量换装自拍 - ${batchResults.length}组任务`;
+    } else if (activeTab === 'text_to_image') {
+      data = {
+        textToImagePrompt,
+        textToImageRefImage,
+        textToImageCount,
+        results: textToImageResults
+      };
+      if (!name) name = `提示词生成 - ${textToImageResults.length}张图片`;
+    } else {
+      return;
+    }
+
+    try {
+      if (activeSessionId && !explicitName) {
+        await historyDb.sessions.update(activeSessionId, {
+          timestamp: new Date(),
+          data: JSON.parse(JSON.stringify(data))
+        });
+      } else {
+        const id = await historyDb.sessions.add({
+          timestamp: new Date(),
+          type,
+          name,
+          data: JSON.parse(JSON.stringify(data))
+        });
+        if (!explicitName) setActiveSessionId(id as number);
+      }
+      if (explicitName) alert('已成功保存到历史记录');
+    } catch (err) {
+      console.error('History save failed:', err);
+    }
+  };
+
+  const restoreFromHistory = (session: GenerationSession) => {
+    setActiveTab(session.type as any);
+    const { data } = session;
+    
+    if (session.type === 'selfie_var') {
+      setSelfieSourceImages(data.selfieSourceImages || []);
+      setSelfieResults(data.results || []);
+      setSelfieVarOnlyStanding(data.selfieVarOnlyStanding ?? false);
+      setSelfieVarBlockFace(data.selfieVarBlockFace ?? true);
+    } else if (session.type === 'try_on') {
+      setTryOnModelImage(data.tryOnModelImage || null);
+      setTryOnClothingImages(data.tryOnClothingImages || []);
+      setTryOnStockingImages(data.tryOnStockingImages || []);
+      setTryOnResults(data.results || []);
+    } else if (session.type === 'batch_tryon') {
+      setBatchClothingImages(data.batchClothingImages || []);
+      setBatchPrompt(data.batchPrompt || '');
+      setBatchResults(data.results || []);
+    } else if (session.type === 'text_to_image') {
+      setTextToImagePrompt(data.textToImagePrompt || '');
+      setTextToImageRefImage(data.textToImageRefImage || null);
+      setTextToImageCount(data.textToImageCount || 4);
+      setTextToImageResults(data.results || []);
+    }
+    
+    setShowHistory(false);
+  };
+
+
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
+      {showHistory && (
+        <HistoryPanel 
+          onClose={() => setShowHistory(false)} 
+          onRestore={restoreFromHistory} 
+        />
+      )}
+      {/* Global Progress Bar */}
+      {isProcessing && progressTotal > 0 && (
+        <div className="fixed top-0 left-0 w-full z-[100] animate-in fade-in slide-in-from-top-4">
+          <div className="bg-white/90 backdrop-blur-md border-b border-indigo-100 p-3 shadow-md">
+            <div className="max-w-4xl mx-auto">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-indigo-600 flex items-center gap-2">
+                  <RefreshCw className="animate-spin" size={14} />
+                  批量生成中... 进度: {progressCount} / {progressTotal}
+                </span>
+                <span className="text-xs font-bold text-indigo-600">
+                  {Math.round((progressCount / progressTotal) * 100)}%
+                </span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200 shadow-inner">
+                <div 
+                  className="bg-indigo-500 h-full transition-all duration-300 ease-out shadow-[0_0_8px_rgba(99,102,241,0.4)]"
+                  style={{ width: `${(progressCount / progressTotal) * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -1068,6 +1475,13 @@ Task:
             <div className={`hidden sm:block text-xs font-medium px-3 py-1 rounded-full ${useCustomApi ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
               {useCustomApi ? '自定义 API' : '官方 Gemini'}
             </div>
+            <button 
+              onClick={() => setShowHistory(!showHistory)}
+              className={`p-2 rounded-lg transition-colors ${showHistory ? 'bg-slate-200 text-slate-900' : 'text-slate-500 hover:bg-slate-100'}`}
+              title="历史记录"
+            >
+              <Box size={20} />
+            </button>
             <button 
               onClick={() => setShowSettings(!showSettings)}
               className={`p-2 rounded-lg transition-colors ${showSettings ? 'bg-slate-200 text-slate-900' : 'text-slate-500 hover:bg-slate-100'}`}
@@ -1214,6 +1628,17 @@ Task:
                 >
                     <Layers size={18} />
                     批量换装自拍
+                </button>
+                <button
+                    onClick={() => setActiveTab('text_to_image')}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-sm transition-all whitespace-nowrap ${
+                    activeTab === 'text_to_image' 
+                        ? 'bg-amber-50 text-amber-700 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                    }`}
+                >
+                    <Sparkles size={18} />
+                    提示词生成
                 </button>
             </div>
 
@@ -1497,13 +1922,33 @@ Task:
                                 <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                                     变身结果
                                 </h3>
-                                <button 
-                                    onClick={downloadAllSelfieResults}
-                                    className="flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg font-medium hover:bg-indigo-200 transition-colors text-sm"
-                                >
-                                    <Download size={16} />
-                                    一键下载全部 (含原图/文件夹分类)
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => saveToHistory()}
+                                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-colors text-sm"
+                                        title="保存当前结果到历史记录"
+                                    >
+                                        <Box size={16} />
+                                        保存全部分类
+                                    </button>
+                                    {selfieResults.some(r => r.result.status === 'error') && (
+                                        <button 
+                                            onClick={retryAllFailedSelfie}
+                                            disabled={isProcessing}
+                                            className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 transition-colors text-sm disabled:opacity-50"
+                                        >
+                                            <RefreshCw size={16} className={isProcessing ? 'animate-spin' : ''} />
+                                            一键失败重试
+                                        </button>
+                                    )}
+                                    <button 
+                                        onClick={downloadAllSelfieResults}
+                                        className="flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg font-medium hover:bg-indigo-200 transition-colors text-sm"
+                                    >
+                                        <Download size={16} />
+                                        一键下载全部 (含原图/文件夹分类)
+                                    </button>
+                                </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 {selfieResults.map((item, idx) => {
@@ -1542,6 +1987,7 @@ Task:
                                                             className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
                                                             alt={templateLabel} 
                                                             onClick={() => setViewImageUrl(result.imageUrl!)}
+                                                            loading="lazy"
                                                         />
                                                         {/* Hover Actions */}
                                                         <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1658,6 +2104,7 @@ Task:
                                                                         className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
                                                                         alt="Result" 
                                                                         onClick={() => setViewImageUrl(result.imageUrl!)}
+                                                                        loading="lazy"
                                                                     />
                                                                     <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                                         <button 
@@ -1771,13 +2218,33 @@ Task:
                          <div className="space-y-6">
                             <div className="flex justify-between items-center px-4">
                                 <h3 className="text-xl font-bold text-slate-800">生成结果列表</h3>
-                                <button 
-                                    onClick={downloadAllTryOnResults}
-                                    className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 rounded-lg font-medium hover:bg-orange-200 transition-colors text-sm"
-                                >
-                                    <Download size={16} />
-                                    一键下载全部
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => saveToHistory()}
+                                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-colors text-sm"
+                                        title="保存当前结果到历史记录"
+                                    >
+                                        <Box size={16} />
+                                        保存记录
+                                    </button>
+                                    {tryOnResults.some(r => r.result.status === 'error') && (
+                                        <button 
+                                            onClick={retryAllFailedTryOn}
+                                            disabled={isProcessing}
+                                            className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 transition-colors text-sm disabled:opacity-50"
+                                        >
+                                            <RefreshCw size={16} className={isProcessing ? 'animate-spin' : ''} />
+                                            一键失败重试
+                                        </button>
+                                    )}
+                                    <button 
+                                        onClick={downloadAllTryOnResults}
+                                        className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 rounded-lg font-medium hover:bg-orange-200 transition-colors text-sm"
+                                    >
+                                        <Download size={16} />
+                                        一键下载全部
+                                    </button>
+                                </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
                                 {tryOnResults.map((item, idx) => {
@@ -1853,6 +2320,7 @@ Task:
                                                                 className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
                                                                 alt="Result" 
                                                                 onClick={() => setViewImageUrl(result.imageUrl!)}
+                                                                loading="lazy"
                                                             />
                                                             <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                                 <button 
@@ -2015,6 +2483,7 @@ Task:
                                                                 className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
                                                                 alt="Result" 
                                                                 onClick={() => setViewImageUrl(result.imageUrl!)}
+                                                                loading="lazy"
                                                             />
                                                             <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                                 <button 
@@ -2099,13 +2568,33 @@ Task:
                                 <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                                     生成结果
                                 </h3>
-                                <button 
-                                    onClick={() => downloadAll(batchResults.map(r => r.result.imageUrl).filter(Boolean) as string[], 'batch-tryon')}
-                                    className="flex items-center gap-2 px-4 py-2 bg-pink-100 text-pink-700 rounded-lg font-medium hover:bg-pink-200 transition-colors text-sm"
-                                >
-                                    <Download size={16} />
-                                    一键下载全部
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => saveToHistory()}
+                                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-colors text-sm"
+                                        title="保存当前结果到历史记录"
+                                    >
+                                        <Box size={16} />
+                                        保存记录
+                                    </button>
+                                    {batchResults.some(r => r.result.status === 'error') && (
+                                        <button 
+                                            onClick={retryAllFailedBatchTryOn}
+                                            disabled={isProcessing}
+                                            className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 transition-colors text-sm disabled:opacity-50"
+                                        >
+                                            <RefreshCw size={16} className={isProcessing ? 'animate-spin' : ''} />
+                                            一键失败重试
+                                        </button>
+                                    )}
+                                    <button 
+                                        onClick={() => downloadAll(batchResults.map(r => r.result.imageUrl).filter(Boolean) as string[], 'batch-tryon')}
+                                        className="flex items-center gap-2 px-4 py-2 bg-pink-100 text-pink-700 rounded-lg font-medium hover:bg-pink-200 transition-colors text-sm"
+                                    >
+                                        <Download size={16} />
+                                        一键下载全部
+                                    </button>
+                                </div>
                             </div>
                             
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -2155,6 +2644,7 @@ Task:
                                                             className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
                                                             alt={`Try-on ${sourceIndex + 1}`} 
                                                             onClick={() => setViewImageUrl(result.imageUrl!)}
+                                                            loading="lazy"
                                                         />
                                                         {/* Hover Actions */}
                                                         <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -2226,8 +2716,205 @@ Task:
                     )}
                 </div>
             )}
-        </div>
-      </main>
+
+            {/* Text to Image Tab Content */}
+            {activeTab === 'text_to_image' && (
+                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                                {/* Left: Configuration */}
+                                <div className="lg:col-span-4 space-y-6">
+                                    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                                        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                            <Sparkles className="text-amber-500" size={20} />
+                                            生成参数
+                                        </h3>
+                                        
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700 mb-2">生成数量 (1-8)</label>
+                                                <div className="flex gap-2 flex-wrap">
+                                                    {[1, 2, 4, 8].map(num => (
+                                                        <button
+                                                            key={num}
+                                                            onClick={() => setTextToImageCount(num)}
+                                                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                                                textToImageCount === num 
+                                                                    ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-500' 
+                                                                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                                                            }`}
+                                                        >
+                                                            {num} 张
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700 mb-2">参考图 (可选)</label>
+                                                <ImageUploader 
+                                                    onImageSelected={setTextToImageRefImage} 
+                                                    currentImage={textToImageRefImage}
+                                                />
+                                                {textToImageRefImage && (
+                                                    <button 
+                                                        onClick={() => setTextToImageRefImage(null)}
+                                                        className="mt-2 text-xs text-red-500 hover:underline flex items-center gap-1"
+                                                    >
+                                                        <X size={12} /> 移除参考图
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div className="pt-4">
+                                                <Button 
+                                                    variant="primary"
+                                                    onClick={handleTextToImageGeneration}
+                                                    disabled={!textToImagePrompt.trim() || isProcessing}
+                                                    className="w-full bg-amber-600 hover:bg-amber-700 shadow-amber-200"
+                                                >
+                                                    <Sparkles size={18} />
+                                                    {isProcessing ? '生成中...' : '开始生成图片'}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Right: Prompt & Results */}
+                                <div className="lg:col-span-8 space-y-6">
+                                    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                                        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                            <Layers className="text-amber-500" size={20} />
+                                            内容描述
+                                        </h3>
+                                        <textarea
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 min-h-[120px] focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all outline-none text-slate-700 placeholder:text-slate-400 font-medium"
+                                            placeholder="输入详细的图片描述提示词 (支持中文和英文)..."
+                                            value={textToImagePrompt}
+                                            onChange={(e) => setTextToImagePrompt(e.target.value)}
+                                        />
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            <button 
+                                                onClick={() => setTextToImagePrompt(p => p + (p ? ', ' : '') + 'photorealistic, high quality, highly detailed')}
+                                                className="px-2 py-1 bg-slate-100 text-slate-500 rounded text-[10px] hover:bg-slate-200 transition-colors"
+                                            >
+                                                + 高清
+                                            </button>
+                                            <button 
+                                                onClick={() => setTextToImagePrompt(p => p + (p ? ', ' : '') + 'anime style, 2d, hand drawn')}
+                                                className="px-2 py-1 bg-slate-100 text-slate-500 rounded text-[10px] hover:bg-slate-200 transition-colors"
+                                            >
+                                                + 动漫风
+                                            </button>
+                                            <button 
+                                                onClick={() => setTextToImagePrompt(p => p + (p ? ', ' : '') + 'cyberpunk, futuristic, neon lights')}
+                                                className="px-2 py-1 bg-slate-100 text-slate-500 rounded text-[10px] hover:bg-slate-200 transition-colors"
+                                            >
+                                                + 赛博朋克
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Result area */}
+                                    {textToImageResults.length > 0 && (
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center px-4">
+                                                <h3 className="text-xl font-bold text-slate-800">生成结果</h3>
+                                                <div className="flex items-center gap-2">
+                                                    <button 
+                                                        onClick={() => saveToHistory()}
+                                                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-colors text-sm"
+                                                        title="保存当前结果到历史记录"
+                                                    >
+                                                        <Box size={16} />
+                                                        保存记录
+                                                    </button>
+                                                    {textToImageResults.some(r => r.result.status === 'error') && (
+                                                        <button 
+                                                            onClick={retryAllFailedTextToImage}
+                                                            disabled={isProcessing}
+                                                            className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 transition-colors text-sm disabled:opacity-50"
+                                                        >
+                                                            <RefreshCw size={16} className={isProcessing ? 'animate-spin' : ''} />
+                                                            一键失败重试
+                                                        </button>
+                                                    )}
+                                                    <button 
+                                                        onClick={downloadAllTextToImage}
+                                                        className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg font-medium hover:bg-amber-200 transition-colors text-sm"
+                                                    >
+                                                        <Download size={16} />
+                                                        一键下载全部
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                                {textToImageResults.map((item) => {
+                                                    const { result } = item;
+
+                                                    return (
+                                                        <div key={item.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col group relative">
+                                                            <div className="absolute top-2 right-2 z-10">
+                                                                <button 
+                                                                    onClick={() => retryTextToImage(item.id)}
+                                                                    disabled={result.status === 'loading'}
+                                                                    className="p-1.5 bg-white/80 backdrop-blur-sm text-slate-400 hover:text-amber-600 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+                                                                    title="重新生成"
+                                                                >
+                                                                    <RefreshCw size={14} className={result.status === 'loading' ? 'animate-spin' : ''} />
+                                                                </button>
+                                                            </div>
+
+                                                            <div className="relative aspect-[9/16] bg-slate-50 flex items-center justify-center overflow-hidden">
+                                                                {result.status === 'loading' && (
+                                                                    <div className="flex flex-col items-center gap-2">
+                                                                        <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                                                                        <span className="text-[10px] text-slate-400 font-medium">生成中...</span>
+                                                                    </div>
+                                                                )}
+                                                                {result.status === 'error' && (
+                                                                    <div className="text-red-400 text-xs text-center p-3">
+                                                                        <AlertCircle size={20} className="mx-auto mb-2" />
+                                                                        <p className="font-bold mb-1">生成失败</p>
+                                                                        <p className="line-clamp-2 opacity-70">{result.error}</p>
+                                                                    </div>
+                                                                )}
+                                                                {result.status === 'success' && result.imageUrl && (
+                                                                    <>
+                                                                        <img 
+                                                                            src={result.imageUrl} 
+                                                                            className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
+                                                                            alt="Generated" 
+                                                                            onClick={() => setViewImageUrl(result.imageUrl!)}
+                                                                            loading="lazy"
+                                                                        />
+                                                                        <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                            <a 
+                                                                                href={result.imageUrl}
+                                                                                download={`result_${item.id}.png`}
+                                                                                className="p-2 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm hover:bg-white text-slate-700 transition-all hover:scale-110"
+                                                                                onClick={(e) => e.stopPropagation()}
+                                                                                title="下载图片"
+                                                                            >
+                                                                                <Download size={16} />
+                                                                            </a>
+                                                                        </div>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </main>
 
       {/* Lightbox Modal */}
       <ImageModal imageUrl={viewImageUrl} onClose={() => setViewImageUrl(null)} />

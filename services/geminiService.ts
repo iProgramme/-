@@ -260,6 +260,88 @@ export const generateImageWithReference = async (
   }
 };
 
+export const generateTextToImage = async (
+  prompt: string,
+  config: {
+    useCustomApi: boolean;
+    customBaseUrl?: string;
+    customApiKey?: string;
+    model: string;
+    imageSize?: '1K' | '2K' | '4K';
+    aspectRatio?: string;
+  },
+  referenceImage?: { base64: string, mimeType: string }
+): Promise<string> => {
+  const { useCustomApi, customBaseUrl, customApiKey, model, imageSize, aspectRatio } = config;
+  
+  const finalApiKey = (useCustomApi && customApiKey) ? customApiKey : process.env.API_KEY;
+
+  if (!finalApiKey) {
+    throw new Error("API Key 缺失。请在设置中输入自定义 Key 或确保环境变量已配置。");
+  }
+
+  const options: any = { apiKey: finalApiKey };
+  if (useCustomApi && customBaseUrl) {
+    options.httpOptions = { baseUrl: customBaseUrl };
+  }
+
+  const ai = new GoogleGenAI(options);
+
+  const generationConfig: any = {
+    imageConfig: {
+      aspectRatio: aspectRatio || '9:16'
+    }
+  };
+  
+  if (imageSize) {
+    generationConfig.imageConfig.imageSize = imageSize;
+  }
+
+  try {
+    const parts: any[] = [];
+    
+    if (referenceImage) {
+      parts.push({
+        inlineData: {
+          data: referenceImage.base64,
+          mimeType: referenceImage.mimeType,
+        },
+      });
+    }
+
+    parts.push({
+      text: prompt,
+    });
+
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: {
+        parts: parts,
+      },
+      config: generationConfig,
+    });
+
+    const candidates = response.candidates;
+    if (candidates && candidates.length > 0) {
+        const partsList = candidates[0].content?.parts;
+        if (partsList) {
+            for (const part of partsList) {
+                if (part.inlineData && part.inlineData.data) {
+                    return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+                }
+            }
+        }
+    }
+    
+    throw new Error("响应中未找到图片数据");
+
+  } catch (error: any) {
+    console.error("Gemini API Error:", error);
+    const msg = error.message || "未知错误";
+    throw new Error(`API 调用失败: ${msg}`);
+  }
+};
+
 export const generateTryOn = async (
   modelImageBase64: string,
   modelImageMimeType: string,

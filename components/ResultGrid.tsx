@@ -99,6 +99,7 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ results, onRetry, onImag
                     src={result.imageUrl} 
                     alt={variationLabel} 
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    loading="lazy"
                   />
                 )}
               </div>
