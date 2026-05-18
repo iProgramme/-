@@ -231,6 +231,10 @@ const App: React.FC = () => {
     return localStorage.getItem('customApiKey') || '';
   });
 
+  const [gptApiKey, setGptApiKey] = useState(() => {
+    return localStorage.getItem('gptApiKey') || '';
+  });
+
   // Model Selection State
   // 'gemini-2.5-flash-image' = Nano Banana 1
   // 'gemini-3-pro-image-preview' = Nano Banana 2
@@ -242,7 +246,8 @@ const App: React.FC = () => {
     localStorage.setItem('useCustomApi', useCustomApi.toString());
     localStorage.setItem('customBaseUrl', customBaseUrl);
     localStorage.setItem('customApiKey', customApiKey);
-  }, [useCustomApi, customBaseUrl, customApiKey]);
+    localStorage.setItem('gptApiKey', gptApiKey);
+  }, [useCustomApi, customBaseUrl, customApiKey, gptApiKey]);
 
   useEffect(() => {
     if (!process.env.API_KEY && !useCustomApi) {
@@ -277,6 +282,7 @@ const App: React.FC = () => {
     useCustomApi,
     customBaseUrl,
     customApiKey,
+    gptApiKey,
     model: selectedModel,
     imageSize: selectedResolution
   };
@@ -1509,7 +1515,6 @@ Task:
                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
                   <div>
                     <div className="font-semibold text-slate-800">启用自定义 API 节点</div>
-                    <div className="text-xs text-slate-500 mt-0.5">使用 <a href="https://guojianapi.com" className="text-blue" target="_blank">郭减api</a> 或其他代理</div>
                   </div>
                   <button 
                     onClick={() => setUseCustomApi(!useCustomApi)}
@@ -1534,6 +1539,21 @@ Task:
                         className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-mono"
                       />
                     </div>
+                  </div>
+                )}
+
+                {selectedModel === 'gpt-image-2' && (
+                  <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                      <Key size={14} className="text-slate-400" /> GPT API Key (专用)
+                    </label>
+                    <input 
+                      type="password"
+                      value={gptApiKey}
+                      onChange={(e) => setGptApiKey(e.target.value)}
+                      placeholder="输入 gpt-image-2 专用密钥"
+                      className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-mono"
+                    />
                   </div>
                 )}
               </div>
@@ -1658,6 +1678,7 @@ Task:
                             <option value="gemini-2.5-flash-image">Nano Banana 1 (快速/Flash)</option>
                             <option value="gemini-3-pro-image-preview">Nano Banana 2 (高清/Pro)</option>
                             <option value="gemini-3.1-flash-image-preview">Nano Banana 3 (Flash Preview)</option>
+                            <option value="gpt-image-2">GPT Image 2 (专用)</option>
                         </select>
                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
                             <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>

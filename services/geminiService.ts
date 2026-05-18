@@ -1,4 +1,28 @@
 import { GoogleGenAI } from "@google/genai";
+import axios from "axios";
+
+const base64ToBlob = (base64: string, mimeType: string): Blob => {
+  const byteCharacters = atob(base64);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  return new Blob([byteArray], { type: mimeType });
+};
+
+const normalizeImageUrl = (url: string): string => {
+  if (!url) return '';
+  // Some APIs return base64 strings instead of URLs
+  if (url.startsWith('https://') || url.startsWith('http://') || url.startsWith('data:')) {
+    return url;
+  }
+  // If it's a raw base64 string without data: prefix
+  if (url.length > 1000) {
+    return `data:image/png;base64,${url}`;
+  }
+  return url;
+};
 
 export const generateImageEdit = async (
   base64Image: string,
@@ -8,12 +32,40 @@ export const generateImageEdit = async (
     useCustomApi: boolean;
     customBaseUrl?: string;
     customApiKey?: string;
+    gptApiKey?: string;
     model: string;
     imageSize?: '1K' | '2K' | '4K';
   }
 ): Promise<string> => {
-  const { useCustomApi, customBaseUrl, customApiKey, model, imageSize } = config;
+  const { useCustomApi, customBaseUrl, customApiKey, gptApiKey, model, imageSize } = config;
   
+  if (model === 'gpt-image-2') {
+    if (!gptApiKey) {
+      throw new Error("gpt-image-2 API Key 缺失。请在设置中输入。");
+    }
+
+    const formData = new FormData();
+    const blob = base64ToBlob(base64Image, mimeType);
+    formData.append("image", blob, "image.png");
+    formData.append("prompt", prompt);
+    formData.append("model", "gpt-image-2");
+    formData.append("n", "1");
+
+    const response = await axios.post('https://magic666.top/v1/images/edits', formData, {
+      headers: {
+        'Authorization': `Bearer ${gptApiKey}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    const urls = response.data.data
+      .map((img: any) => normalizeImageUrl(img.url || img.b64_json || ''))
+      .filter((src: string): src is string => !!src);
+
+    if (urls.length > 0) return urls[0];
+    throw new Error("响应中未找到图片数据");
+  }
+
   // Determine which key to use: User-provided custom key or system environment key
   const finalApiKey = (useCustomApi && customApiKey) ? customApiKey : process.env.API_KEY;
 
@@ -89,13 +141,45 @@ export const generatePoseTransfer = async (
     useCustomApi: boolean;
     customBaseUrl?: string;
     customApiKey?: string;
+    gptApiKey?: string;
     model: string;
     imageSize?: '1K' | '2K' | '4K';
     aspectRatio?: string;
   }
 ): Promise<string> => {
-  const { useCustomApi, customBaseUrl, customApiKey, model, imageSize, aspectRatio } = config;
+  const { useCustomApi, customBaseUrl, customApiKey, gptApiKey, model, imageSize, aspectRatio } = config;
   
+  if (model === 'gpt-image-2') {
+    // For pose transfer, gpt-image-2 might not support multiple images in 'edits' easily via the standard OpenAI-like API
+    // but the user DEMO shows it can take multiple files? 
+    // "currentUploadedFiles.forEach(file => formData.append("image", file));"
+    // So let's try sending both.
+    if (!gptApiKey) {
+      throw new Error("gpt-image-2 API Key 缺失。请在设置中输入。");
+    }
+
+    const formData = new FormData();
+    formData.append("image", base64ToBlob(baseImageBase64, baseImageMimeType), "base.png");
+    formData.append("image", base64ToBlob(poseImageBase64, poseImageMimeType), "pose.png");
+    formData.append("prompt", `Perform pose transfer from pose image to base image. Maintain identity. High quality.`);
+    formData.append("model", "gpt-image-2");
+    formData.append("n", "1");
+
+    const response = await axios.post('https://magic666.top/v1/images/edits', formData, {
+      headers: {
+        'Authorization': `Bearer ${gptApiKey}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    const urls = response.data.data
+      .map((img: any) => normalizeImageUrl(img.url || img.b64_json || ''))
+      .filter((src: string): src is string => !!src);
+
+    if (urls.length > 0) return urls[0];
+    throw new Error("响应中未找到图片数据");
+  }
+
   const finalApiKey = (useCustomApi && customApiKey) ? customApiKey : process.env.API_KEY;
 
   if (!finalApiKey) {
@@ -190,12 +274,39 @@ export const generateImageWithReference = async (
     useCustomApi: boolean;
     customBaseUrl?: string;
     customApiKey?: string;
+    gptApiKey?: string;
     model: string;
     imageSize?: '1K' | '2K' | '4K';
   }
 ): Promise<string> => {
-  const { useCustomApi, customBaseUrl, customApiKey, model, imageSize } = config;
+  const { useCustomApi, customBaseUrl, customApiKey, gptApiKey, model, imageSize } = config;
   
+  if (model === 'gpt-image-2') {
+    if (!gptApiKey) {
+      throw new Error("gpt-image-2 API Key 缺失。请在设置中输入。");
+    }
+
+    const formData = new FormData();
+    formData.append("image", base64ToBlob(referenceImageBase64, referenceImageMimeType), "ref.png");
+    formData.append("prompt", prompt);
+    formData.append("model", "gpt-image-2");
+    formData.append("n", "1");
+
+    const response = await axios.post('https://magic666.top/v1/images/edits', formData, {
+      headers: {
+        'Authorization': `Bearer ${gptApiKey}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    const urls = response.data.data
+      .map((img: any) => normalizeImageUrl(img.url || img.b64_json || ''))
+      .filter((src: string): src is string => !!src);
+
+    if (urls.length > 0) return urls[0];
+    throw new Error("响应中未找到图片数据");
+  }
+
   const finalApiKey = (useCustomApi && customApiKey) ? customApiKey : process.env.API_KEY;
 
   if (!finalApiKey) {
@@ -266,14 +377,56 @@ export const generateTextToImage = async (
     useCustomApi: boolean;
     customBaseUrl?: string;
     customApiKey?: string;
+    gptApiKey?: string;
     model: string;
     imageSize?: '1K' | '2K' | '4K';
     aspectRatio?: string;
   },
   referenceImage?: { base64: string, mimeType: string }
 ): Promise<string> => {
-  const { useCustomApi, customBaseUrl, customApiKey, model, imageSize, aspectRatio } = config;
+  const { useCustomApi, customBaseUrl, customApiKey, gptApiKey, model, imageSize, aspectRatio } = config;
   
+  if (model === 'gpt-image-2') {
+    if (!gptApiKey) {
+      throw new Error("gpt-image-2 API Key 缺失。请在设置中输入。");
+    }
+
+    let response;
+    if (referenceImage) {
+      const formData = new FormData();
+      formData.append("image", base64ToBlob(referenceImage.base64, referenceImage.mimeType), "ref.png");
+      formData.append("prompt", prompt);
+      formData.append("model", "gpt-image-2");
+      formData.append("n", "1");
+
+      response = await axios.post('https://magic666.top/v1/images/edits', formData, {
+        headers: {
+          'Authorization': `Bearer ${gptApiKey}`,
+          'Accept': 'application/json'
+        }
+      });
+    } else {
+      response = await axios.post('https://magic666.top/v1/images/generations', {
+        prompt: prompt,
+        model: "gpt-image-2",
+        n: 1
+      }, {
+        headers: {
+          'Authorization': `Bearer ${gptApiKey}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+
+    const urls = response.data.data
+      .map((img: any) => normalizeImageUrl(img.url || img.b64_json || ''))
+      .filter((src: string): src is string => !!src);
+
+    if (urls.length > 0) return urls[0];
+    throw new Error("响应中未找到图片数据");
+  }
+
   const finalApiKey = (useCustomApi && customApiKey) ? customApiKey : process.env.API_KEY;
 
   if (!finalApiKey) {
@@ -352,14 +505,45 @@ export const generateTryOn = async (
     useCustomApi: boolean;
     customBaseUrl?: string;
     customApiKey?: string;
+    gptApiKey?: string;
     model: string;
     imageSize?: '1K' | '2K' | '4K';
   },
   stockingImageBase64?: string,
   stockingImageMimeType?: string
 ): Promise<string> => {
-  const { useCustomApi, customBaseUrl, customApiKey, model, imageSize } = config;
+  const { useCustomApi, customBaseUrl, customApiKey, gptApiKey, model, imageSize } = config;
   
+  if (model === 'gpt-image-2') {
+    if (!gptApiKey) {
+      throw new Error("gpt-image-2 API Key 缺失。请在设置中输入。");
+    }
+
+    const formData = new FormData();
+    formData.append("image", base64ToBlob(modelImageBase64, modelImageMimeType), "model.png");
+    formData.append("image", base64ToBlob(clothingImageBase64, clothingImageMimeType), "clothing.png");
+    if (stockingImageBase64 && stockingImageMimeType) {
+      formData.append("image", base64ToBlob(stockingImageBase64, stockingImageMimeType), "stocking.png");
+    }
+    formData.append("prompt", prompt);
+    formData.append("model", "gpt-image-2");
+    formData.append("n", "1");
+
+    const response = await axios.post('https://magic666.top/v1/images/edits', formData, {
+      headers: {
+        'Authorization': `Bearer ${gptApiKey}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    const urls = response.data.data
+      .map((img: any) => normalizeImageUrl(img.url || img.b64_json || ''))
+      .filter((src: string): src is string => !!src);
+
+    if (urls.length > 0) return urls[0];
+    throw new Error("响应中未找到图片数据");
+  }
+
   const finalApiKey = (useCustomApi && customApiKey) ? customApiKey : process.env.API_KEY;
 
   if (!finalApiKey) {
