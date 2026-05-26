@@ -165,6 +165,8 @@ const App: React.FC = () => {
   const [samePoseSourceImage, setSamePoseSourceImage] = useState<UploadedImage | null>(null);
   const [samePoseResults, setSamePoseResults] = useState<GenerationResult[]>([]);
   const [samePoseCount, setSamePoseCount] = useState<number>(8);
+  const [samePoseOnlyStanding, setSamePoseOnlyStanding] = useState(true);
+  const [samePoseBlockFace, setSamePoseBlockFace] = useState(true);
 
   // Magic Edit State (Batch)
   const [magicImages, setMagicImages] = useState<UploadedImage[]>([]);
@@ -241,6 +243,95 @@ const App: React.FC = () => {
   // 'gemini-3.1-flash-image-preview' = Nano Banana 3
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3.1-flash-image-preview');
   const [selectedResolution, setSelectedResolution] = useState<'1K' | '2K' | '4K'>('2K');
+
+  const [balanceCheck, setBalanceCheck] = useState<{
+    isLoading: boolean;
+    error: string | null;
+    success: boolean;
+    totalAvailable: number | null;
+    totalUsed: number | null;
+    totalGranted: number | null;
+    userName: string | null;
+    keyQueried: 'custom' | 'gpt' | '';
+  }>({
+    isLoading: false,
+    error: null,
+    success: false,
+    totalAvailable: null,
+    totalUsed: null,
+    totalGranted: null,
+    userName: null,
+    keyQueried: ''
+  });
+
+  const checkKeyUsage = async (token: string, keyType: 'custom' | 'gpt') => {
+    if (!token) {
+      setBalanceCheck({
+        isLoading: false,
+        error: '请输入密钥后再进行查询',
+        success: false,
+        totalAvailable: null,
+        totalUsed: null,
+        totalGranted: null,
+        userName: null,
+        keyQueried: keyType
+      });
+      return;
+    }
+
+    setBalanceCheck({
+      isLoading: true,
+      error: null,
+      success: false,
+      totalAvailable: null,
+      totalUsed: null,
+      totalGranted: null,
+      userName: null,
+      keyQueried: keyType
+    });
+
+    try {
+      const response = await fetch("/api/balance", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ apiKey: token })
+      });
+
+      if (!response.ok) {
+        throw new Error(`请求失败 (HTTP ${response.status})`);
+      }
+
+      const result = await response.json();
+      if (result.success && result.data) {
+        setBalanceCheck({
+          isLoading: false,
+          error: null,
+          success: true,
+          totalAvailable: result.data.total_available,
+          totalUsed: result.data.total_used,
+          totalGranted: result.data.total_granted,
+          userName: result.data.name || 'Token',
+          keyQueried: keyType
+        });
+      } else {
+        throw new Error(result.message || '查询失败，可能是无效密钥或接口出错');
+      }
+    } catch (error: any) {
+      console.error(error);
+      setBalanceCheck({
+        isLoading: false,
+        error: error.message || '网络错误，请稍后重试',
+        success: false,
+        totalAvailable: null,
+        totalUsed: null,
+        totalGranted: null,
+        userName: null,
+        keyQueried: keyType
+      });
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem('useCustomApi', useCustomApi.toString());
@@ -507,7 +598,15 @@ const App: React.FC = () => {
     if (!samePoseSourceImage) return;
 
     // AI Prompt to intelligently identify and keep the base posture while changing specifics
-    const basePrompt = "Identify the character's current general posture category (e.g., standing, sitting on the floor, squatting, kneeling). Keep the character in this EXACT SAME general posture category, but change the specific pose, hand/leg placements, body language, and camera angle to create a completely new and dynamic variation. Maintain clothes and background identity. High quality photorealistic.";
+    let basePrompt = "Identify the character's current general posture category (e.g., standing, sitting on the floor, squatting, kneeling). Keep the character in this EXACT SAME general posture category, but change the specific pose, hand/leg placements, body language, and camera angle to create a completely new and dynamic variation. Maintain clothes and background identity. High quality photorealistic.";
+    
+    if (samePoseOnlyStanding) {
+      basePrompt += " Focus strictly on creating variations that are standing poses with different expressive hand gestures and subtle shifts in standing weight/angle.";
+    }
+
+    if (samePoseBlockFace) {
+      basePrompt += " ENSURE the smartphone is ALWAYS covering the character's face in all variations. The face must be completely obscured by the phone as if taking a mirror selfie.";
+    }
 
     const newResults: GenerationResult[] = Array.from({ length: samePoseCount }).map((_, index) => ({
       id: `same-pose-${Date.now()}-${index}`,
@@ -545,7 +644,15 @@ const App: React.FC = () => {
 
   const retrySamePose = async (resultId: string) => {
     if (!samePoseSourceImage) return;
-    const basePrompt = "Identify the character's current general posture category (e.g., standing, sitting on the floor, squatting, kneeling). Keep the character in this EXACT SAME general posture category, but change the specific pose, hand/leg placements, body language, and camera angle to create a completely new and dynamic variation. Maintain clothes and background identity. High quality photorealistic.";
+    let basePrompt = "Identify the character's current general posture category (e.g., standing, sitting on the floor, squatting, kneeling). Keep the character in this EXACT SAME general posture category, but change the specific pose, hand/leg placements, body language, and camera angle to create a completely new and dynamic variation. Maintain clothes and background identity. High quality photorealistic.";
+
+    if (samePoseOnlyStanding) {
+      basePrompt += " Focus strictly on creating variations that are standing poses with different expressive hand gestures and subtle shifts in standing weight/angle.";
+    }
+
+    if (samePoseBlockFace) {
+      basePrompt += " ENSURE the smartphone is ALWAYS covering the character's face in all variations. The face must be completely obscured by the phone as if taking a mirror selfie.";
+    }
 
     setSamePoseResults(prev => prev.map(r => r.id === resultId ? { ...r, status: 'loading', error: undefined } : r));
     try {
@@ -1478,6 +1585,73 @@ Task:
             </h1>
           </div>
           <div className="flex items-center gap-3">
+            {/* 外部查询余额组件 */}
+            {(selectedModel === 'gpt-image-2' ? gptApiKey : (useCustomApi ? customApiKey : '')) ? (
+              <div className="relative group/balance flex items-center gap-2 bg-slate-50 border border-slate-200/70 rounded-lg pl-3 pr-2 py-1.5 transition-all text-xs">
+                <span className="text-slate-500 font-medium whitespace-nowrap">
+                  {selectedModel === 'gpt-image-2' ? 'GPT-2 余额' : '自定义 API 余额'}:
+                </span>
+                <span className="font-bold text-teal-600 font-mono whitespace-nowrap text-center">
+                  {balanceCheck.isLoading && balanceCheck.keyQueried === (selectedModel === 'gpt-image-2' ? 'gpt' : 'custom') ? (
+                    <RefreshCw size={12} className="animate-spin text-teal-500 inline-block" />
+                  ) : balanceCheck.error && balanceCheck.keyQueried === (selectedModel === 'gpt-image-2' ? 'gpt' : 'custom') ? (
+                    <span className="text-red-500 font-medium">查询失败</span>
+                  ) : balanceCheck.success && balanceCheck.totalAvailable !== null && balanceCheck.keyQueried === (selectedModel === 'gpt-image-2' ? 'gpt' : 'custom') ? (
+                    `￥${(balanceCheck.totalAvailable / 500000).toFixed(4)}元`
+                  ) : (
+                    '未查询'
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const token = selectedModel === 'gpt-image-2' ? gptApiKey : customApiKey;
+                    const type = selectedModel === 'gpt-image-2' ? 'gpt' : 'custom';
+                    checkKeyUsage(token, type);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-medium px-2.5 py-1 rounded-md transition-all text-xs shadow-sm flex items-center gap-1 cursor-pointer font-sans"
+                  title="点击查询最新额度"
+                >
+                  <RefreshCw size={11} className={(balanceCheck.isLoading && balanceCheck.keyQueried === (selectedModel === 'gpt-image-2' ? 'gpt' : 'custom')) ? "animate-spin" : ""} />
+                  查询余额
+                </button>
+
+                {/* 悬浮余额详情 */}
+                {balanceCheck.keyQueried === (selectedModel === 'gpt-image-2' ? 'gpt' : 'custom') && (balanceCheck.success || balanceCheck.error) && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-xl p-3 shadow-xl z-50 opacity-0 group-hover/balance:opacity-100 transition-opacity duration-200 pointer-events-none">
+                    <div className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-1.5">
+                      额度账单详情
+                    </div>
+                    {balanceCheck.success && balanceCheck.totalAvailable !== null && (
+                      <div className="space-y-1.5 text-[11px] text-slate-600 font-medium">
+                        <div className="flex justify-between">
+                          <span>账户名称:</span>
+                          <span className="font-semibold text-slate-800 font-mono">{balanceCheck.userName}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>可用点数:</span>
+                          <span className="font-semibold text-slate-800 font-mono">{balanceCheck.totalAvailable.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>已消耗额:</span>
+                          <span className="text-slate-500 font-mono">{balanceCheck.totalUsed?.toLocaleString() || 0}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-slate-100 pt-1.5 text-xs">
+                          <span>可用余额:</span>
+                          <span className="font-bold text-teal-600 font-mono">￥{(balanceCheck.totalAvailable / 500000).toFixed(4)}元</span>
+                        </div>
+                      </div>
+                    )}
+                    {balanceCheck.error && (
+                      <div className="text-red-500 text-[11px] leading-relaxed">
+                        查询出错: {balanceCheck.error}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
             <div className={`hidden sm:block text-xs font-medium px-3 py-1 rounded-full ${useCustomApi ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
               {useCustomApi ? '自定义 API' : '官方 Gemini'}
             </div>
@@ -1554,6 +1728,58 @@ Task:
                       placeholder="输入 gpt-image-2 专用密钥"
                       className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-mono"
                     />
+                  </div>
+                )}
+
+                {/* Balance & Usage Display */}
+                {(balanceCheck.isLoading || balanceCheck.success || balanceCheck.error) && (
+                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="flex justify-between items-center text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      <span>密钥状态汇总 ({balanceCheck.keyQueried === 'gpt' ? 'gpt-image-2 专用' : '自定义 API'})</span>
+                      {balanceCheck.isLoading && <RefreshCw size={12} className="animate-spin text-blue-500" />}
+                    </div>
+
+                    {balanceCheck.isLoading && (
+                      <div className="text-sm text-slate-500 py-1 flex items-center gap-2">
+                        正在查询额度使用情况...
+                      </div>
+                    )}
+
+                    {balanceCheck.error && (
+                      <div className="text-xs text-red-500 font-medium py-1">
+                        查询出错: {balanceCheck.error}
+                      </div>
+                    )}
+
+                    {balanceCheck.success && balanceCheck.totalAvailable !== null && (
+                      <div className="space-y-2 py-1">
+                        <div className="flex justify-between items-baseline">
+                          <span className="text-slate-600 text-sm">剩余额度：</span>
+                          <span className="text-lg font-bold text-teal-600 font-mono">
+                            ￥{(balanceCheck.totalAvailable / 500000).toFixed(4)} 元
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-xs text-slate-400">
+                          <span>租户名称: {balanceCheck.userName}</span>
+                          <span>(剩余点数: {balanceCheck.totalAvailable.toLocaleString()})</span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-1.5 mt-1 overflow-hidden">
+                          {balanceCheck.totalGranted && balanceCheck.totalGranted > 0 ? (
+                            <div 
+                              className="bg-teal-500 h-1.5 rounded-full" 
+                              style={{ width: `${Math.min(100, Math.max(0, (balanceCheck.totalAvailable / balanceCheck.totalGranted) * 100))}%` }}
+                              title={`${((balanceCheck.totalAvailable / balanceCheck.totalGranted) * 100).toFixed(1)}%`}
+                            ></div>
+                          ) : (
+                            <div className="bg-teal-500 h-1.5 rounded-full w-full"></div>
+                          )}
+                        </div>
+                        <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                          <span>已用: {balanceCheck.totalUsed?.toLocaleString() || 0}</span>
+                          <span>总额: {balanceCheck.totalGranted?.toLocaleString() || 0}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1829,6 +2055,34 @@ Task:
                                             className="w-32 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-teal-600"
                                         />
                                         <span className="text-sm font-bold text-teal-600 w-4 text-center">{samePoseCount}</span>
+                                    </div>
+                                </div>
+
+                                <div className="w-full space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <h3 className="text-sm font-bold text-slate-700">生成选项</h3>
+                                    
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm text-slate-600 flex items-center gap-2 cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={samePoseOnlyStanding}
+                                                onChange={(e) => setSamePoseOnlyStanding(e.target.checked)}
+                                                className="rounded text-teal-600 focus:ring-teal-500"
+                                            />
+                                            只生成不同的站姿和手势
+                                        </label>
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm text-slate-600 flex items-center gap-2 cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={samePoseBlockFace}
+                                                onChange={(e) => setSamePoseBlockFace(e.target.checked)}
+                                                className="rounded text-teal-600 focus:ring-teal-500"
+                                            />
+                                            手机全程挡脸
+                                        </label>
                                     </div>
                                 </div>
 
