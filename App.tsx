@@ -291,12 +291,12 @@ const App: React.FC = () => {
     });
 
     try {
-      const response = await fetch("/api/balance", {
-        method: "POST",
+      const response = await fetch("https://api.vectorengine.cn/api/usage/token/", {
+        method: "GET",
         headers: {
-          "Content-Type": "application/json"
+          "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ apiKey: token })
+        redirect: "follow"
       });
 
       if (!response.ok) {
