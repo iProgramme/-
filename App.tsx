@@ -291,12 +291,12 @@ const App: React.FC = () => {
     });
 
     try {
-      const response = await fetch("https://api.vectorengine.cn/api/usage/token/", {
-        method: "GET",
+      const response = await fetch("/api/balance", {
+        method: "POST",
         headers: {
-          "Authorization": `Bearer ${token}`
+          "Content-Type": "application/json"
         },
-        redirect: "follow"
+        body: JSON.stringify({ apiKey: token })
       });
 
       if (!response.ok) {
@@ -1730,7 +1730,7 @@ Task:
                 )}
 
                 {/* Balance & Usage Display */}
-                {(balanceCheck.isLoading || balanceCheck.success || balanceCheck.error) && (
+                {balanceCheck.keyQueried === 'custom' && (balanceCheck.isLoading || balanceCheck.success || balanceCheck.error) && (
                   <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                     <div className="flex justify-between items-center text-xs font-semibold text-slate-500 uppercase tracking-wider">
                       <span>密钥状态汇总 (自定义 API)</span>
