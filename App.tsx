@@ -1586,17 +1586,17 @@ Task:
           </div>
           <div className="flex items-center gap-3">
             {/* 外部查询余额组件 */}
-            {(selectedModel === 'gpt-image-2' ? gptApiKey : (useCustomApi ? customApiKey : '')) ? (
+            {selectedModel !== 'gpt-image-2' && useCustomApi && customApiKey ? (
               <div className="relative group/balance flex items-center gap-2 bg-slate-50 border border-slate-200/70 rounded-lg pl-3 pr-2 py-1.5 transition-all text-xs">
                 <span className="text-slate-500 font-medium whitespace-nowrap">
-                  {selectedModel === 'gpt-image-2' ? 'GPT-2 余额' : '自定义 API 余额'}:
+                  自定义 API 余额:
                 </span>
                 <span className="font-bold text-teal-600 font-mono whitespace-nowrap text-center">
-                  {balanceCheck.isLoading && balanceCheck.keyQueried === (selectedModel === 'gpt-image-2' ? 'gpt' : 'custom') ? (
+                  {balanceCheck.isLoading && balanceCheck.keyQueried === 'custom' ? (
                     <RefreshCw size={12} className="animate-spin text-teal-500 inline-block" />
-                  ) : balanceCheck.error && balanceCheck.keyQueried === (selectedModel === 'gpt-image-2' ? 'gpt' : 'custom') ? (
+                  ) : balanceCheck.error && balanceCheck.keyQueried === 'custom' ? (
                     <span className="text-red-500 font-medium">查询失败</span>
-                  ) : balanceCheck.success && balanceCheck.totalAvailable !== null && balanceCheck.keyQueried === (selectedModel === 'gpt-image-2' ? 'gpt' : 'custom') ? (
+                  ) : balanceCheck.success && balanceCheck.totalAvailable !== null && balanceCheck.keyQueried === 'custom' ? (
                     `￥${(balanceCheck.totalAvailable / 500000).toFixed(4)}元`
                   ) : (
                     '未查询'
@@ -1605,19 +1605,17 @@ Task:
                 <button
                   type="button"
                   onClick={() => {
-                    const token = selectedModel === 'gpt-image-2' ? gptApiKey : customApiKey;
-                    const type = selectedModel === 'gpt-image-2' ? 'gpt' : 'custom';
-                    checkKeyUsage(token, type);
+                    checkKeyUsage(customApiKey, 'custom');
                   }}
                   className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-medium px-2.5 py-1 rounded-md transition-all text-xs shadow-sm flex items-center gap-1 cursor-pointer font-sans"
                   title="点击查询最新额度"
                 >
-                  <RefreshCw size={11} className={(balanceCheck.isLoading && balanceCheck.keyQueried === (selectedModel === 'gpt-image-2' ? 'gpt' : 'custom')) ? "animate-spin" : ""} />
+                  <RefreshCw size={11} className={(balanceCheck.isLoading && balanceCheck.keyQueried === 'custom') ? "animate-spin" : ""} />
                   查询余额
                 </button>
 
                 {/* 悬浮余额详情 */}
-                {balanceCheck.keyQueried === (selectedModel === 'gpt-image-2' ? 'gpt' : 'custom') && (balanceCheck.success || balanceCheck.error) && (
+                {balanceCheck.keyQueried === 'custom' && (balanceCheck.success || balanceCheck.error) && (
                   <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-xl p-3 shadow-xl z-50 opacity-0 group-hover/balance:opacity-100 transition-opacity duration-200 pointer-events-none">
                     <div className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-1.5">
                       额度账单详情
@@ -1735,7 +1733,7 @@ Task:
                 {(balanceCheck.isLoading || balanceCheck.success || balanceCheck.error) && (
                   <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                     <div className="flex justify-between items-center text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      <span>密钥状态汇总 ({balanceCheck.keyQueried === 'gpt' ? 'gpt-image-2 专用' : '自定义 API'})</span>
+                      <span>密钥状态汇总 (自定义 API)</span>
                       {balanceCheck.isLoading && <RefreshCw size={12} className="animate-spin text-blue-500" />}
                     </div>
 

@@ -75,8 +75,8 @@ export const generateImageEdit = async (
 
   // Configure options
   const options: any = { apiKey: finalApiKey };
-  if (useCustomApi && customBaseUrl) {
-    options.httpOptions = { baseUrl: customBaseUrl };
+  if (useCustomApi) {
+    options.httpOptions = { baseUrl: "https://api.vectorengine.cn" };
   }
 
   const ai = new GoogleGenAI(options);
@@ -187,8 +187,8 @@ export const generatePoseTransfer = async (
   }
 
   const options: any = { apiKey: finalApiKey };
-  if (useCustomApi && customBaseUrl) {
-    options.httpOptions = { baseUrl: customBaseUrl };
+  if (useCustomApi) {
+    options.httpOptions = { baseUrl: "https://api.vectorengine.cn" };
   }
 
   const ai = new GoogleGenAI(options);
@@ -314,8 +314,8 @@ export const generateImageWithReference = async (
   }
 
   const options: any = { apiKey: finalApiKey };
-  if (useCustomApi && customBaseUrl) {
-    options.httpOptions = { baseUrl: customBaseUrl };
+  if (useCustomApi) {
+    options.httpOptions = { baseUrl: "https://api.vectorengine.cn" };
   }
 
   const ai = new GoogleGenAI(options);
@@ -434,8 +434,8 @@ export const generateTextToImage = async (
   }
 
   const options: any = { apiKey: finalApiKey };
-  if (useCustomApi && customBaseUrl) {
-    options.httpOptions = { baseUrl: customBaseUrl };
+  if (useCustomApi) {
+    options.httpOptions = { baseUrl: "https://api.vectorengine.cn" };
   }
 
   const ai = new GoogleGenAI(options);
@@ -551,8 +551,8 @@ export const generateTryOn = async (
   }
 
   const options: any = { apiKey: finalApiKey };
-  if (useCustomApi && customBaseUrl) {
-    options.httpOptions = { baseUrl: customBaseUrl };
+  if (useCustomApi) {
+    options.httpOptions = { baseUrl: "https://api.vectorengine.cn" };
   }
 
   const ai = new GoogleGenAI(options);
