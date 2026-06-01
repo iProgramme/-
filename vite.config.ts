@@ -8,6 +8,18 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/api/balance-proxy': {
+            target: 'https://api.vectorengine.cn',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api\/balance-proxy/, '/api/usage/token/')
+          },
+          '/api/balance': {
+            target: 'https://api.vectorengine.cn',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api\/balance/, '/api/usage/token/')
+          }
+        }
       },
       plugins: [react()],
       define: {

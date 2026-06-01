@@ -292,11 +292,11 @@ const App: React.FC = () => {
 
     try {
       const response = await fetch("/api/balance", {
-        method: "POST",
+        method: "GET",
         headers: {
-          "Content-Type": "application/json"
+          "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ apiKey: token })
+        redirect: "follow"
       });
 
       if (!response.ok) {

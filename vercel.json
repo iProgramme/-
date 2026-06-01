@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/balance",
+      "destination": "https://api.vectorengine.cn/api/usage/token/"
+    },
+    {
+      "source": "/api/balance-proxy",
+      "destination": "https://api.vectorengine.cn/api/usage/token/"
+    }
+  ]
+}
