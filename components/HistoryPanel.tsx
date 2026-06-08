@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { historyDb, GenerationSession } from '../db';
-import { X, Clock, Trash2, ExternalLink, RefreshCw } from 'lucide-react';
+import { X, Clock, Trash2, ExternalLink, RefreshCw, Box } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface HistoryPanelProps {

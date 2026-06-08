@@ -299,12 +299,19 @@ const App: React.FC = () => {
         redirect: "follow"
       });
 
-      if (!response.ok) {
-        throw new Error(`请求失败 (HTTP ${response.status})`);
+      let result: any;
+      try {
+        result = await response.json();
+      } catch (e) {
+        // Ignore JSON parse error if body isn't JSON
       }
 
-      const result = await response.json();
-      if (result.success && result.data) {
+      if (!response.ok) {
+        const errMsg = result?.error?.message || result?.message || `请求失败 (HTTP ${response.status})`;
+        throw new Error(errMsg);
+      }
+
+      if (result && result.success && result.data) {
         setBalanceCheck({
           isLoading: false,
           error: null,
@@ -316,7 +323,8 @@ const App: React.FC = () => {
           keyQueried: keyType
         });
       } else {
-        throw new Error(result.message || '查询失败，可能是无效密钥或接口出错');
+        const errMsg = result?.error?.message || result?.message || '查询失败，可能是无效密钥或接口出错';
+        throw new Error(errMsg);
       }
     } catch (error: any) {
       console.error(error);
