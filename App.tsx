@@ -1111,7 +1111,7 @@ const App: React.FC = () => {
     setProgressTotal(newResults.length);
 
     try {
-      const chunkSize = 2; // Process in small chunks for stability
+      const chunkSize = 8; // Process in larger parallel batches for high concurrency support
       for (let i = 0; i < newResults.length; i += chunkSize) {
         const chunk = newResults.slice(i, i + chunkSize);
         await Promise.all(chunk.map(async (item) => {
@@ -1203,7 +1203,7 @@ const App: React.FC = () => {
     setProgressCount(0);
     setProgressTotal(failedItems.length);
     try {
-      const chunkSize = 2;
+      const chunkSize = 8;
       for (let i = 0; i < failedItems.length; i += chunkSize) {
         const chunk = failedItems.slice(i, i + chunkSize);
         await Promise.all(chunk.map(async (item) => {
@@ -1559,8 +1559,8 @@ Task:
       )}
       {/* Global Progress Bar */}
       {isProcessing && progressTotal > 0 && (
-        <div className="fixed top-0 left-0 w-full z-[100] animate-in fade-in slide-in-from-top-4">
-          <div className="bg-white/90 backdrop-blur-md border-b border-indigo-100 p-3 shadow-md">
+        <div className="fixed bottom-6 right-6 w-80 z-[100] animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="bg-white/90 backdrop-blur-md border border-indigo-100 p-4 shadow-lg rounded-xl">
             <div className="max-w-4xl mx-auto">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-bold text-indigo-600 flex items-center gap-2">
