@@ -15,8 +15,6 @@ import { Layers, Wand2, Sparkles, AlertTriangle, AlertCircle, Settings, X, Check
 
 // Selfie Variations Templates (Single Image -> 8 Variations)
 // 2 Sitting, 2 Kneeling, 2 Squatting, 2 Standing
-import { historyDb, GenerationSession } from './db';
-import { HistoryPanel } from './components/HistoryPanel';
 
 const SELFIE_TEMPLATES = [
   { 
@@ -220,12 +218,10 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressCount, setProgressCount] = useState(0);
   const [progressTotal, setProgressTotal] = useState(0);
-  const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [apiKeyError, setApiKeyError] = useState(false);
   
   // Settings state
   const [showSettings, setShowSettings] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [useCustomApi, setUseCustomApi] = useState(() => {
     return localStorage.getItem('useCustomApi') === 'true';
   });
@@ -359,22 +355,16 @@ const App: React.FC = () => {
     }
   }, [useCustomApi]);
 
-  // Auto-save history when a batch finishes or periodically during progress
+  // Delete the database to completely free up IndexedDB space on startup
   useEffect(() => {
-    if (!isProcessing && progressTotal > 0 && progressCount === progressTotal) {
-      saveToHistory();
-    }
-  }, [isProcessing, progressCount, progressTotal]);
-
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isProcessing && progressTotal > 0) {
-      interval = setInterval(() => {
-        saveToHistory();
-      }, 5000);
-    }
-    return () => clearInterval(interval);
-  }, [isProcessing, progressTotal]);
+    const req = indexedDB.deleteDatabase('GenerationHistory');
+    req.onsuccess = () => {
+      console.log('Successfully cleared and deleted history database (GenerationHistory) to free up storage space.');
+    };
+    req.onerror = () => {
+      console.error('Failed to clear history database.');
+    };
+  }, []);
 
   const handleSelectPose = (poseId: PoseType) => {
     setSelectedPose(poseId);
@@ -1542,109 +1532,11 @@ Task:
 
 
   const saveToHistory = async (explicitName?: string) => {
-    let data: any = {};
-    let type = activeTab;
-    let name = explicitName || '';
-
-    if (activeTab === 'selfie_var') {
-      data = {
-        selfieSourceImages,
-        results: selfieResults,
-        selfieVarOnlyStanding,
-        selfieVarBlockFace
-      };
-      if (!name) name = `自拍变身 - ${selfieResults.length}张图片`;
-    } else if (activeTab === 'try_on') {
-      data = {
-        tryOnModelImage,
-        tryOnClothingImages,
-        tryOnStockingImages,
-        tryOnStockingSource,
-        selectedPresetStockings,
-        tryOnStockingMatchStrategy,
-        results: tryOnResults
-      };
-      if (!name) name = `模特换装 - ${tryOnResults.length}组任务`;
-    } else if (activeTab === 'batch_tryon') {
-      data = {
-        batchClothingImages,
-        batchPrompt,
-        results: batchResults
-      };
-      if (!name) name = `批量换装自拍 - ${batchResults.length}组任务`;
-    } else if (activeTab === 'text_to_image') {
-      data = {
-        textToImagePrompt,
-        textToImageRefImage,
-        textToImageCount,
-        results: textToImageResults
-      };
-      if (!name) name = `提示词生成 - ${textToImageResults.length}张图片`;
-    } else {
-      return;
-    }
-
-    try {
-      if (activeSessionId && !explicitName) {
-        await historyDb.sessions.update(activeSessionId, {
-          timestamp: new Date(),
-          data: JSON.parse(JSON.stringify(data))
-        });
-      } else {
-        const id = await historyDb.sessions.add({
-          timestamp: new Date(),
-          type,
-          name,
-          data: JSON.parse(JSON.stringify(data))
-        });
-        if (!explicitName) setActiveSessionId(id as number);
-      }
-      if (explicitName) alert('已成功保存到历史记录');
-    } catch (err) {
-      console.error('History save failed:', err);
-    }
+    // History recording is disabled to save local storage/disk space
   };
-
-  const restoreFromHistory = (session: GenerationSession) => {
-    setActiveTab(session.type as any);
-    const { data } = session;
-    
-    if (session.type === 'selfie_var') {
-      setSelfieSourceImages(data.selfieSourceImages || []);
-      setSelfieResults(data.results || []);
-      setSelfieVarOnlyStanding(data.selfieVarOnlyStanding ?? false);
-      setSelfieVarBlockFace(data.selfieVarBlockFace ?? true);
-    } else if (session.type === 'try_on') {
-      setTryOnModelImage(data.tryOnModelImage || null);
-      setTryOnClothingImages(data.tryOnClothingImages || []);
-      setTryOnStockingImages(data.tryOnStockingImages || []);
-      setTryOnStockingSource(data.tryOnStockingSource || 'upload');
-      setSelectedPresetStockings(data.selectedPresetStockings || []);
-      setTryOnStockingMatchStrategy(data.tryOnStockingMatchStrategy || 'random');
-      setTryOnResults(data.results || []);
-    } else if (session.type === 'batch_tryon') {
-      setBatchClothingImages(data.batchClothingImages || []);
-      setBatchPrompt(data.batchPrompt || '');
-      setBatchResults(data.results || []);
-    } else if (session.type === 'text_to_image') {
-      setTextToImagePrompt(data.textToImagePrompt || '');
-      setTextToImageRefImage(data.textToImageRefImage || null);
-      setTextToImageCount(data.textToImageCount || 4);
-      setTextToImageResults(data.results || []);
-    }
-    
-    setShowHistory(false);
-  };
-
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
-      {showHistory && (
-        <HistoryPanel 
-          onClose={() => setShowHistory(false)} 
-          onRestore={restoreFromHistory} 
-        />
-      )}
       {/* Global Progress Bar */}
       {isProcessing && progressTotal > 0 && (
         <div className="fixed bottom-6 right-6 w-80 z-[100] animate-in fade-in slide-in-from-bottom-4 duration-200">
@@ -1749,13 +1641,6 @@ Task:
             <div className={`hidden sm:block text-xs font-medium px-3 py-1 rounded-full ${useCustomApi ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
               {useCustomApi ? '自定义 API' : '官方 Gemini'}
             </div>
-            <button 
-              onClick={() => setShowHistory(!showHistory)}
-              className={`p-2 rounded-lg transition-colors ${showHistory ? 'bg-slate-200 text-slate-900' : 'text-slate-500 hover:bg-slate-100'}`}
-              title="历史记录"
-            >
-              <Box size={20} />
-            </button>
             <button 
               onClick={() => setShowSettings(!showSettings)}
               className={`p-2 rounded-lg transition-colors ${showSettings ? 'bg-slate-200 text-slate-900' : 'text-slate-500 hover:bg-slate-100'}`}
@@ -2292,14 +2177,6 @@ Task:
                                     变身结果
                                 </h3>
                                 <div className="flex items-center gap-2">
-                                    <button 
-                                        onClick={() => saveToHistory()}
-                                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-colors text-sm"
-                                        title="保存当前结果到历史记录"
-                                    >
-                                        <Box size={16} />
-                                        保存全部分类
-                                    </button>
                                     {selfieResults.some(r => r.result.status === 'error') && (
                                         <button 
                                             onClick={retryAllFailedSelfie}
@@ -2753,14 +2630,6 @@ Task:
                             <div className="flex justify-between items-center px-4">
                                 <h3 className="text-xl font-bold text-slate-800">生成结果列表</h3>
                                 <div className="flex items-center gap-2">
-                                    <button 
-                                        onClick={() => saveToHistory()}
-                                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-colors text-sm"
-                                        title="保存当前结果到历史记录"
-                                    >
-                                        <Box size={16} />
-                                        保存记录
-                                    </button>
                                     {tryOnResults.some(r => r.result.status === 'error') && (
                                         <button 
                                             onClick={retryAllFailedTryOn}
@@ -3115,14 +2984,6 @@ Task:
                                     生成结果
                                 </h3>
                                 <div className="flex items-center gap-2">
-                                    <button 
-                                        onClick={() => saveToHistory()}
-                                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-colors text-sm"
-                                        title="保存当前结果到历史记录"
-                                    >
-                                        <Box size={16} />
-                                        保存记录
-                                    </button>
                                     {batchResults.some(r => r.result.status === 'error') && (
                                         <button 
                                             onClick={retryAllFailedBatchTryOn}
@@ -3367,14 +3228,6 @@ Task:
                                             <div className="flex justify-between items-center px-4">
                                                 <h3 className="text-xl font-bold text-slate-800">生成结果</h3>
                                                 <div className="flex items-center gap-2">
-                                                    <button 
-                                                        onClick={() => saveToHistory()}
-                                                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-colors text-sm"
-                                                        title="保存当前结果到历史记录"
-                                                    >
-                                                        <Box size={16} />
-                                                        保存记录
-                                                    </button>
                                                     {textToImageResults.some(r => r.result.status === 'error') && (
                                                         <button 
                                                             onClick={retryAllFailedTextToImage}
