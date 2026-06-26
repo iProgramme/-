@@ -703,7 +703,6 @@ const App: React.FC = () => {
 
     setSelfieResults(allNewResults);
     setIsProcessing(true);
-    setActiveSessionId(null);
     setProgressCount(0);
     setProgressTotal(allNewResults.length);
 
@@ -896,7 +895,6 @@ const App: React.FC = () => {
 
     setBatchResults(newResults);
     setIsProcessing(true);
-    setActiveSessionId(null);
     setProgressCount(0);
     setProgressTotal(newResults.length);
 
@@ -1099,7 +1097,6 @@ const App: React.FC = () => {
 
     setTextToImageResults(newResults);
     setIsProcessing(true);
-    setActiveSessionId(null);
     setProgressCount(0);
     setProgressTotal(newResults.length);
 
@@ -1275,7 +1272,6 @@ const App: React.FC = () => {
 
     setTryOnResults(newResults);
     setIsProcessing(true);
-    setActiveSessionId(null);
     setProgressCount(0);
     setProgressTotal(newResults.length);
 
