@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UploadedImage, PoseType, GenerationResult } from './types';
-import { POSES, VARIATION_COUNT } from './constants';
+import { POSES, VARIATION_COUNT, STOCKING_PRESETS } from './constants';
 import { generateImageEdit, generateTryOn, generatePoseTransfer, generateImageWithReference, generateTextToImage } from './services/geminiService';
 import { ImageUploader } from './components/ImageUploader';
 import { BatchImageUploader } from './components/BatchImageUploader'; // New Component
@@ -195,7 +195,10 @@ const App: React.FC = () => {
   const [tryOnModelImage, setTryOnModelImage] = useState<UploadedImage | null>(null);
   const [tryOnClothingImages, setTryOnClothingImages] = useState<UploadedImage[]>([]);
   const [tryOnStockingImages, setTryOnStockingImages] = useState<UploadedImage[]>([]);
-  const [tryOnResults, setTryOnResults] = useState<{sourceIndex: number, result: GenerationResult, stockingIndex?: number}[]>([]);
+  const [tryOnStockingSource, setTryOnStockingSource] = useState<'upload' | 'preset'>('upload');
+  const [selectedPresetStockings, setSelectedPresetStockings] = useState<string[]>([]);
+  const [tryOnStockingMatchStrategy, setTryOnStockingMatchStrategy] = useState<'random' | 'force'>('random');
+  const [tryOnResults, setTryOnResults] = useState<{sourceIndex: number, result: GenerationResult, stockingIndex?: number, stockingPreset?: string}[]>([]);
 
   // Pose Transfer State (New Tab)
   const [poseTransferBaseImage, setPoseTransferBaseImage] = useState<UploadedImage | null>(null);
@@ -1238,17 +1241,40 @@ const App: React.FC = () => {
 
     const newResults = tryOnClothingImages.map((_, index) => {
       let stockingIndex: number | undefined = undefined;
-      if (tryOnStockingImages.length > 0) {
-        const pool = [-1, ...Array.from({ length: tryOnStockingImages.length }, (_, i) => i)];
-        const selected = pool[Math.floor(Math.random() * pool.length)];
-        if (selected !== -1) {
-          stockingIndex = selected;
+      let stockingPreset: string | undefined = undefined;
+
+      if (tryOnStockingSource === 'upload') {
+        if (tryOnStockingImages.length > 0) {
+          if (tryOnStockingMatchStrategy === 'force') {
+            const idx = Math.floor(Math.random() * tryOnStockingImages.length);
+            stockingIndex = idx;
+          } else {
+            const pool = [-1, ...Array.from({ length: tryOnStockingImages.length }, (_, i) => i)];
+            const selected = pool[Math.floor(Math.random() * pool.length)];
+            if (selected !== -1) {
+              stockingIndex = selected;
+            }
+          }
+        }
+      } else {
+        if (selectedPresetStockings.length > 0) {
+          if (tryOnStockingMatchStrategy === 'force') {
+            const idx = Math.floor(Math.random() * selectedPresetStockings.length);
+            stockingPreset = selectedPresetStockings[idx];
+          } else {
+            const pool = [null, ...selectedPresetStockings];
+            const selected = pool[Math.floor(Math.random() * pool.length)];
+            if (selected !== null) {
+              stockingPreset = selected;
+            }
+          }
         }
       }
 
       return {
         sourceIndex: index,
         stockingIndex: stockingIndex,
+        stockingPreset: stockingPreset,
         result: {
           id: `tryon-${Date.now()}-${index}`,
           poseId: 'tryon',
@@ -1277,6 +1303,7 @@ const App: React.FC = () => {
               try {
                 const clothingImg = tryOnClothingImages[item.sourceIndex];
                 const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
+                const activePreset = item.stockingPreset ? STOCKING_PRESETS.find(p => p.id === item.stockingPreset) : undefined;
                 
                 let prompt = TRYON_PROMPT;
                 if (stockingImg) {
@@ -1294,6 +1321,23 @@ Task:
 5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
 6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
 7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot (or wearing the stockings without shoes). Ensure the feet are flat on the ground.
+8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+9. Ensure high fidelity for the clothing and stockings texture and fit.
+9:16`;
+                } else if (activePreset) {
+                  prompt = `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a clothing product (garment).
+Input 2: An image of a model standing in a scene.
+
+Task:
+1. Generate a photorealistic image of the model from Input 2 wearing the clothing from Input 1 AND wearing specific stockings/hosiery: ${activePreset.prompt}.
+2. The clothing from Input 1 must completely replace the model's original outfit.
+3. The model's legs MUST be dressed in the stockings: "${activePreset.prompt}". Render this naturally, photorealistically and smoothly.
+4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot wearing the stockings/hosiery described. Ensure the feet are flat on the ground.
 8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
 9. Ensure high fidelity for the clothing and stockings texture and fit.
 9:16`;
@@ -1392,25 +1436,46 @@ Task:
     const clothingImg = tryOnClothingImages[index];
     if (!clothingImg) return;
 
-    // Re-roll stocking selection on retry? Or keep same?
-    // Let's re-roll to give user variety
     let stockingIndex: number | undefined = undefined;
-    if (tryOnStockingImages.length > 0) {
-      const pool = [-1, ...Array.from({ length: tryOnStockingImages.length }, (_, i) => i)];
-      const selected = pool[Math.floor(Math.random() * pool.length)];
-      if (selected !== -1) {
-        stockingIndex = selected;
+    let stockingPreset: string | undefined = undefined;
+
+    if (tryOnStockingSource === 'upload') {
+      if (tryOnStockingImages.length > 0) {
+        if (tryOnStockingMatchStrategy === 'force') {
+          const idx = Math.floor(Math.random() * tryOnStockingImages.length);
+          stockingIndex = idx;
+        } else {
+          const pool = [-1, ...Array.from({ length: tryOnStockingImages.length }, (_, i) => i)];
+          const selected = pool[Math.floor(Math.random() * pool.length)];
+          if (selected !== -1) {
+            stockingIndex = selected;
+          }
+        }
+      }
+    } else {
+      if (selectedPresetStockings.length > 0) {
+        if (tryOnStockingMatchStrategy === 'force') {
+          const idx = Math.floor(Math.random() * selectedPresetStockings.length);
+          stockingPreset = selectedPresetStockings[idx];
+        } else {
+          const pool = [null, ...selectedPresetStockings];
+          const selected = pool[Math.floor(Math.random() * pool.length)];
+          if (selected !== null) {
+            stockingPreset = selected;
+          }
+        }
       }
     }
 
     setTryOnResults(prev => prev.map(r => 
       r.sourceIndex === index 
-        ? { ...r, stockingIndex: stockingIndex, result: { ...r.result, status: 'loading', error: undefined } }
+        ? { ...r, stockingIndex: stockingIndex, stockingPreset: stockingPreset, result: { ...r.result, status: 'loading', error: undefined } }
         : r
     ));
 
     try {
       const stockingImg = stockingIndex !== undefined ? tryOnStockingImages[stockingIndex] : undefined;
+      const activePreset = stockingPreset ? STOCKING_PRESETS.find(p => p.id === stockingPreset) : undefined;
       
       let prompt = TRYON_PROMPT;
       if (stockingImg) {
@@ -1428,6 +1493,23 @@ Task:
 5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
 6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
 7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot (or wearing the stockings without shoes). Ensure the feet are flat on the ground.
+8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+9. Ensure high fidelity for the clothing and stockings texture and fit.
+9:16`;
+      } else if (activePreset) {
+        prompt = `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a clothing product (garment).
+Input 2: An image of a model standing in a scene.
+
+Task:
+1. Generate a photorealistic image of the model from Input 2 wearing the clothing from Input 1 AND wearing specific stockings/hosiery: ${activePreset.prompt}.
+2. The clothing from Input 1 must completely replace the model's original outfit.
+3. The model's legs MUST be dressed in the stockings: "${activePreset.prompt}". Render this naturally, photorealistically and smoothly.
+4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot wearing the stockings/hosiery described. Ensure the feet are flat on the ground.
 8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
 9. Ensure high fidelity for the clothing and stockings texture and fit.
 9:16`;
@@ -1477,6 +1559,9 @@ Task:
         tryOnModelImage,
         tryOnClothingImages,
         tryOnStockingImages,
+        tryOnStockingSource,
+        selectedPresetStockings,
+        tryOnStockingMatchStrategy,
         results: tryOnResults
       };
       if (!name) name = `模特换装 - ${tryOnResults.length}组任务`;
@@ -1533,6 +1618,9 @@ Task:
       setTryOnModelImage(data.tryOnModelImage || null);
       setTryOnClothingImages(data.tryOnClothingImages || []);
       setTryOnStockingImages(data.tryOnStockingImages || []);
+      setTryOnStockingSource(data.tryOnStockingSource || 'upload');
+      setSelectedPresetStockings(data.selectedPresetStockings || []);
+      setTryOnStockingMatchStrategy(data.tryOnStockingMatchStrategy || 'random');
       setTryOnResults(data.results || []);
     } else if (session.type === 'batch_tryon') {
       setBatchClothingImages(data.batchClothingImages || []);
@@ -2461,21 +2549,186 @@ Task:
                             )}
 
                             {tryOnModelImage && (
-                                <div className="animate-in fade-in slide-in-from-bottom-4">
-                                    <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+                                <div className="animate-in fade-in slide-in-from-bottom-4 bg-slate-50/50 p-6 rounded-2xl border border-slate-200/80 space-y-6 text-left">
+                                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                                         <span className="bg-slate-800 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>
-                                        上传丝袜平铺图 (可选/批量)
+                                        丝袜搭配设置 (可选)
                                     </h3>
-                                    <p className="text-xs text-slate-500 mb-2">上传后，AI 将在生成时随机选择一款丝袜搭配，或随机不穿丝袜。</p>
-                                    <BatchImageUploader 
-                                        currentImages={tryOnStockingImages}
-                                        onImagesSelected={(imgs) => {
-                                            setTryOnStockingImages(imgs);
-                                        }}
-                                        maxImages={50}
-                                        title="上传丝袜图 (可选/批量)"
-                                        subtitle="AI 将从中随机挑选进行搭配"
-                                    />
+
+                                    {/* Tab toggle for Source */}
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-2">丝袜来源方式：</label>
+                                        <div className="flex bg-slate-200/60 p-1 rounded-xl max-w-md">
+                                            <button
+                                                type="button"
+                                                onClick={() => setTryOnStockingSource('upload')}
+                                                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
+                                                    tryOnStockingSource === 'upload'
+                                                        ? 'bg-white text-slate-800 shadow-sm'
+                                                        : 'text-slate-600 hover:text-slate-800'
+                                                }`}
+                                            >
+                                                上传丝袜平铺图
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setTryOnStockingSource('preset')}
+                                                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
+                                                    tryOnStockingSource === 'preset'
+                                                        ? 'bg-white text-slate-800 shadow-sm'
+                                                        : 'text-slate-600 hover:text-slate-800'
+                                                }`}
+                                            >
+                                                选择系统内置丝袜 ({STOCKING_PRESETS.length}种)
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Uploading source view */}
+                                    {tryOnStockingSource === 'upload' && (
+                                        <div className="space-y-2 animate-in fade-in duration-200">
+                                            <p className="text-xs text-slate-500 mb-2">上传实物平铺图后，AI 将从中随机选择。建议使用干净的平铺图。</p>
+                                            <BatchImageUploader 
+                                                currentImages={tryOnStockingImages}
+                                                onImagesSelected={(imgs) => {
+                                                    setTryOnStockingImages(imgs);
+                                                }}
+                                                maxImages={50}
+                                                title="上传丝袜图 (可选/批量)"
+                                                subtitle="支持多选，建议使用平铺白底图"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Preset source view */}
+                                    {tryOnStockingSource === 'preset' && (
+                                        <div className="space-y-4 animate-in fade-in duration-200">
+                                            <div className="flex justify-between items-center flex-wrap gap-2">
+                                                <div>
+                                                    <p className="text-xs text-slate-500">
+                                                        请在下方勾选搭配库中支持的丝袜款式（支持多选）。
+                                                    </p>
+                                                    {selectedPresetStockings.length > 0 && (
+                                                        <p className="text-xs font-semibold text-orange-600 mt-1">
+                                                            已勾选 {selectedPresetStockings.length} 款内置丝袜样式
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSelectedPresetStockings(STOCKING_PRESETS.map(p => p.id))}
+                                                        className="text-xs px-2.5 py-1.5 bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors rounded-lg font-medium"
+                                                    >
+                                                        全选
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSelectedPresetStockings([])}
+                                                        className="text-xs px-2.5 py-1.5 bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors rounded-lg font-medium"
+                                                    >
+                                                        清空
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Presets Grid */}
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                {STOCKING_PRESETS.map((preset) => {
+                                                    const isSelected = selectedPresetStockings.includes(preset.id);
+                                                    return (
+                                                        <button
+                                                            key={preset.id}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (isSelected) {
+                                                                    setSelectedPresetStockings(prev => prev.filter(id => id !== preset.id));
+                                                                } else {
+                                                                    setSelectedPresetStockings(prev => [...prev, preset.id]);
+                                                                }
+                                                            }}
+                                                            className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${
+                                                                isSelected
+                                                                    ? 'border-orange-500 bg-orange-50/50 ring-1 ring-orange-500/20 shadow-sm'
+                                                                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50'
+                                                            }`}
+                                                        >
+                                                            <div className="flex flex-col gap-0.5 pr-1 min-w-0 flex-1">
+                                                                <span className="text-xs font-semibold text-slate-800 truncate">{preset.label}</span>
+                                                                <span className="text-[9px] text-slate-400 truncate" title={preset.prompt}>
+                                                                    {preset.prompt}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                                                                <span className={`w-1.5 h-1.5 rounded-full ${preset.color.split(' ')[0] || 'bg-slate-400'}`}></span>
+                                                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                                                                    isSelected
+                                                                        ? 'bg-orange-500 border-orange-500 text-white'
+                                                                        : 'border-slate-300'
+                                                                }`}>
+                                                                    {isSelected && <Check size={10} strokeWidth={3} />}
+                                                                </div>
+                                                            </div>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Matching Strategy */}
+                                    <div className="border-t border-slate-200/80 pt-4">
+                                        <label className="block text-sm font-semibold text-slate-700 mb-2">丝袜匹配衣服机制：</label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl">
+                                            <button
+                                                type="button"
+                                                onClick={() => setTryOnStockingMatchStrategy('random')}
+                                                className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                                                    tryOnStockingMatchStrategy === 'random'
+                                                        ? 'border-orange-500 bg-orange-50/30'
+                                                        : 'border-slate-200 bg-white hover:border-slate-300'
+                                                }`}
+                                            >
+                                                <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 shrink-0 ${
+                                                    tryOnStockingMatchStrategy === 'random'
+                                                        ? 'border-orange-500 text-orange-500'
+                                                        : 'border-slate-300'
+                                                }`}>
+                                                    {tryOnStockingMatchStrategy === 'random' && <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />}
+                                                </div>
+                                                <div className="flex flex-col min-w-0">
+                                                    <span className="text-xs font-semibold text-slate-800">随机匹配或不穿</span>
+                                                    <span className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
+                                                        随机给每件衣服匹配已勾选的随机一个丝袜或者不穿丝袜。
+                                                    </span>
+                                                </div>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => setTryOnStockingMatchStrategy('force')}
+                                                className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                                                    tryOnStockingMatchStrategy === 'force'
+                                                        ? 'border-orange-500 bg-orange-50/30'
+                                                        : 'border-slate-200 bg-white hover:border-slate-300'
+                                                }`}
+                                            >
+                                                <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 shrink-0 ${
+                                                    tryOnStockingMatchStrategy === 'force'
+                                                        ? 'border-orange-500 text-orange-500'
+                                                        : 'border-slate-300'
+                                                }`}>
+                                                    {tryOnStockingMatchStrategy === 'force' && <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />}
+                                                </div>
+                                                <div className="flex flex-col min-w-0">
+                                                    <span className="text-xs font-semibold text-slate-800">强制全匹配</span>
+                                                    <span className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
+                                                        所有生成的衣服都必须在已选丝袜中挑选一款（不允许不穿丝袜）。
+                                                    </span>
+                                                </div>
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -2567,7 +2820,7 @@ Task:
                                                         />
                                                         <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">衣服</div>
                                                     </div>
-                                                    <div className="relative h-1/3 rounded overflow-hidden bg-slate-200 flex items-center justify-center">
+                                                    <div className="relative h-1/3 rounded overflow-hidden bg-slate-200 flex items-center justify-center p-1 text-center">
                                                         {stockingImg ? (
                                                             <>
                                                                 <img 
@@ -2577,6 +2830,18 @@ Task:
                                                                 />
                                                                 <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">丝袜</div>
                                                             </>
+                                                        ) : item.stockingPreset ? (
+                                                            (() => {
+                                                                const preset = STOCKING_PRESETS.find(p => p.id === item.stockingPreset);
+                                                                return (
+                                                                    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 text-white p-1 select-none rounded overflow-hidden">
+                                                                        <span className="text-[9px] font-semibold block leading-tight text-orange-200 truncate max-w-full px-0.5">
+                                                                            {preset?.label || item.stockingPreset}
+                                                                        </span>
+                                                                        <span className="text-[8px] text-slate-400 block scale-90">系统内置</span>
+                                                                    </div>
+                                                                );
+                                                            })()
                                                         ) : (
                                                             <span className="text-[10px] text-slate-400">无丝袜</span>
                                                         )}

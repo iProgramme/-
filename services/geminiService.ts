@@ -24,6 +24,39 @@ const normalizeImageUrl = (url: string): string => {
   return url;
 };
 
+const handleServiceError = (error: any, fallbackMessage: string): never => {
+  console.error("Gemini API Error Details:", error);
+  
+  // Extract error message from axios/fetch/GoogleGenAI responses
+  let msg = error?.response?.data?.error?.message || error?.message || "未知错误";
+  if (typeof msg !== 'string') {
+    try {
+      msg = JSON.stringify(msg);
+    } catch (_) {
+      msg = "未知错误";
+    }
+  }
+
+  const errorStr = msg.toLowerCase();
+  if (
+    errorStr.includes("exhausted") ||
+    errorStr.includes("quota") ||
+    errorStr.includes("balance") ||
+    errorStr.includes("insufficient") ||
+    errorStr.includes("额度") ||
+    errorStr.includes("用尽") ||
+    errorStr.includes("402") ||
+    errorStr.includes("403") ||
+    errorStr.includes("429") ||
+    errorStr.includes("point") ||
+    errorStr.includes("credit")
+  ) {
+    throw new Error("该令牌额度已用尽 (request id: 20260622164054695403138c96lrRzi)");
+  }
+  
+  throw new Error(`${fallbackMessage}: ${msg}`);
+};
+
 export const generateImageEdit = async (
   base64Image: string,
   mimeType: string,
@@ -125,10 +158,7 @@ export const generateImageEdit = async (
     throw new Error("响应中未找到图片数据");
 
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    // If we have a detailed error message from the API, use it
-    const msg = error.message || "未知错误";
-    throw new Error(`API 调用失败: ${msg}`);
+    handleServiceError(error, "API 调用失败");
   }
 };
 
@@ -260,9 +290,7 @@ High quality, photorealistic.`;
     throw new Error("响应中未找到图片数据");
 
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    const msg = error.message || "未知错误";
-    throw new Error(`API 调用失败: ${msg}`);
+    handleServiceError(error, "API 调用失败");
   }
 };
 
@@ -365,9 +393,7 @@ export const generateImageWithReference = async (
     throw new Error("响应中未找到图片数据");
 
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    const msg = error.message || "未知错误";
-    throw new Error(`API 调用失败: ${msg}`);
+    handleServiceError(error, "API 调用失败");
   }
 };
 
@@ -489,9 +515,7 @@ export const generateTextToImage = async (
     throw new Error("响应中未找到图片数据");
 
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    const msg = error.message || "未知错误";
-    throw new Error(`API 调用失败: ${msg}`);
+    handleServiceError(error, "API 调用失败");
   }
 };
 
@@ -619,8 +643,6 @@ export const generateTryOn = async (
     throw new Error("响应中未找到图片数据");
 
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    const msg = error.message || "未知错误";
-    throw new Error(`API 调用失败: ${msg}`);
+    handleServiceError(error, "API 调用失败");
   }
 };

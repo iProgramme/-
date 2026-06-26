@@ -47,9 +47,43 @@ export default async function handler(req, res) {
     });
 
     const data = await apiResponse.json();
+
+    // Check if the token quota is exhausted based on status codes, returned message, or total available points being <= 0
+    const message = (data?.message || data?.error?.message || '').toLowerCase();
+    const isExhaustedMessage = message.includes('exhausted') || 
+                               message.includes('quota') || 
+                               message.includes('balance') || 
+                               message.includes('insufficient') || 
+                               message.includes('额度') || 
+                               message.includes('用尽') ||
+                               message.includes('point');
+
+    const isExhaustedStatus = [401, 402, 403, 429].includes(apiResponse.status);
+    const hasNoAvailablePoints = data?.success === true && data?.data && typeof data?.data?.total_available === 'number' && data?.data?.total_available <= 0;
+
+    if (isExhaustedStatus || isExhaustedMessage || hasNoAvailablePoints) {
+      return res.status(403).json({
+        error: {
+          message: "该令牌额度已用尽 (request id: 20260622164054695403138c96lrRzi)",
+          type: "new_api_error"
+        }
+      });
+    }
+
     return res.status(apiResponse.status).json(data);
   } catch (error) {
     console.error('Error proxying balance request:', error);
+    
+    const errorStr = (error.message || '').toLowerCase();
+    if (errorStr.includes('exhausted') || errorStr.includes('quota') || errorStr.includes('balance') || errorStr.includes('额度') || errorStr.includes('用尽')) {
+      return res.status(403).json({
+        error: {
+          message: "该令牌额度已用尽 (request id: 20260622164054695403138c96lrRzi)",
+          type: "new_api_error"
+        }
+      });
+    }
+
     return res.status(500).json({ success: false, message: error.message || 'Internal Server Error' });
   }
 }
