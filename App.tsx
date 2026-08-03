@@ -708,7 +708,7 @@ const App: React.FC = () => {
 
     try {
       // Process in small chunks to avoid overload
-      const chunkSize = 50;
+      const chunkSize = 20;
       for (let i = 0; i < allNewResults.length; i += chunkSize) {
         const chunk = allNewResults.slice(i, i + chunkSize);
         await Promise.all(chunk.map(async (item) => {
@@ -751,6 +751,9 @@ const App: React.FC = () => {
                     : r
                 ));
                 success = true;
+                if (useCustomApi && customApiKey) {
+                  checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                }
               } catch (error: any) {
                 const errorMsg = error.message || '';
                 const isQuotaError = errorMsg.toLowerCase().includes('quota') || errorMsg.includes('额度');
@@ -758,7 +761,7 @@ const App: React.FC = () => {
                 if (isQuotaError) {
                   setSelfieResults(prev => prev.map(r => 
                     r.id === item.id 
-                      ? { ...r, result: { ...r.result, status: 'error', error: '额度不足 (Quota exceeded)' } } 
+                      ? { ...r, result: { ...r.result, status: 'error', error: `额度不足: ${errorMsg}` } } 
                       : r
                   ));
                   break;
@@ -829,6 +832,9 @@ const App: React.FC = () => {
           ? { ...r, prompt: newRandomPrompt, result: { ...r.result, status: 'success', imageUrl } } 
           : r
       ));
+      if (useCustomApi && customApiKey) {
+        checkKeyUsage(customApiKey, 'custom').catch(() => {});
+      }
     } catch (error: any) {
       setSelfieResults(prev => prev.map(r => 
         r.id === id 
@@ -862,7 +868,7 @@ const App: React.FC = () => {
     setProgressTotal(failedItems.length);
     try {
       // Process in chunks to be consistent with generation
-      const chunkSize = 50;
+      const chunkSize = 20;
       for (let i = 0; i < failedItems.length; i += chunkSize) {
         const chunk = failedItems.slice(i, i + chunkSize);
         await Promise.all(chunk.map(async (item) => {
@@ -899,8 +905,8 @@ const App: React.FC = () => {
     setProgressTotal(newResults.length);
 
     try {
-      // Process in chunks of 50 to balance speed and rate limits
-      const chunkSize = 50;
+      // Process in chunks of 20 to balance speed and rate limits
+      const chunkSize = 20;
       for (let i = 0; i < newResults.length; i += chunkSize) {
         const chunk = newResults.slice(i, i + chunkSize);
         await Promise.all(chunk.map(async (item) => {
@@ -918,6 +924,9 @@ const App: React.FC = () => {
                 ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
                 : r
             ));
+            if (useCustomApi && customApiKey) {
+              checkKeyUsage(customApiKey, 'custom').catch(() => {});
+            }
           } catch (error: any) {
             setBatchResults(prev => prev.map(r => 
               r.id === item.id 
@@ -958,6 +967,9 @@ const App: React.FC = () => {
           ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
           : r
       ));
+      if (useCustomApi && customApiKey) {
+        checkKeyUsage(customApiKey, 'custom').catch(() => {});
+      }
     } catch (error: any) {
       setBatchResults(prev => prev.map(r => 
         r.id === id 
@@ -975,7 +987,7 @@ const App: React.FC = () => {
     setProgressCount(0);
     setProgressTotal(failedItems.length);
     try {
-      const chunkSize = 50;
+      const chunkSize = 20;
       for (let i = 0; i < failedItems.length; i += chunkSize) {
         const chunk = failedItems.slice(i, i + chunkSize);
         await Promise.all(chunk.map(async (item) => {
@@ -1030,6 +1042,9 @@ const App: React.FC = () => {
               ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
               : r
           ));
+          if (useCustomApi && customApiKey) {
+            checkKeyUsage(customApiKey, 'custom').catch(() => {});
+          }
         } catch (error: any) {
            setPoseTransferResults(prev => prev.map(r => 
             r.sourceIndex === index 
@@ -1072,6 +1087,9 @@ const App: React.FC = () => {
           ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
           : r
       ));
+      if (useCustomApi && customApiKey) {
+        checkKeyUsage(customApiKey, 'custom').catch(() => {});
+      }
     } catch (error: any) {
       setPoseTransferResults(prev => prev.map(r => 
         r.sourceIndex === sourceIndex 
@@ -1124,6 +1142,9 @@ const App: React.FC = () => {
                     : r
                 ));
                 success = true;
+                if (useCustomApi && customApiKey) {
+                  checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                }
               } catch (error: any) {
                 const errorMsg = error.message || '';
                 const isQuotaError = errorMsg.toLowerCase().includes('quota') || errorMsg.includes('额度');
@@ -1131,7 +1152,7 @@ const App: React.FC = () => {
                 if (isQuotaError) {
                   setTextToImageResults(prev => prev.map(r => 
                     r.id === item.id 
-                      ? { ...r, result: { ...r.result, status: 'error', error: '额度不足 (Quota exceeded)' } } 
+                      ? { ...r, result: { ...r.result, status: 'error', error: `额度不足: ${errorMsg}` } } 
                       : r
                   ));
                   break;
@@ -1178,6 +1199,9 @@ const App: React.FC = () => {
       setTextToImageResults(prev => prev.map(r => 
         r.id === id ? { ...r, result: { ...r.result, status: 'success', imageUrl } } : r
       ));
+      if (useCustomApi && customApiKey) {
+        checkKeyUsage(customApiKey, 'custom').catch(() => {});
+      }
     } catch (error: any) {
       setTextToImageResults(prev => prev.map(r => 
         r.id === id ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } : r
@@ -1276,7 +1300,7 @@ const App: React.FC = () => {
     setProgressTotal(newResults.length);
 
     try {
-      const chunkSize = 50;
+      const chunkSize = 20;
       for (let i = 0; i < newResults.length; i += chunkSize) {
         const chunk = newResults.slice(i, i + chunkSize);
         await Promise.all(chunk.map(async (item) => {
@@ -1346,6 +1370,9 @@ Task:
                     : r
                 ));
                 success = true;
+                if (useCustomApi && customApiKey) {
+                  checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                }
               } catch (error: any) {
                 const errorMsg = error.message || '';
                 const isQuotaError = errorMsg.toLowerCase().includes('quota') || errorMsg.includes('额度');
@@ -1353,7 +1380,7 @@ Task:
                 if (isQuotaError) {
                   setTryOnResults(prev => prev.map(r => 
                     r.sourceIndex === item.sourceIndex 
-                      ? { ...r, result: { ...r.result, status: 'error', error: '额度不足 (Quota exceeded)' } } 
+                      ? { ...r, result: { ...r.result, status: 'error', error: `额度不足: ${errorMsg}` } } 
                       : r
                   ));
                   break;
@@ -1401,7 +1428,7 @@ Task:
     setProgressCount(0);
     setProgressTotal(failedItems.length);
     try {
-      const chunkSize = 50;
+      const chunkSize = 20;
       for (let i = 0; i < failedItems.length; i += chunkSize) {
         const chunk = failedItems.slice(i, i + chunkSize);
         await Promise.all(chunk.map(async (item) => {
@@ -1517,6 +1544,9 @@ Task:
           ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
           : r
       ));
+      if (useCustomApi && customApiKey) {
+        checkKeyUsage(customApiKey, 'custom').catch(() => {});
+      }
     } catch (error: any) {
       setTryOnResults(prev => prev.map(r => 
         r.sourceIndex === index 
@@ -1760,7 +1790,15 @@ Task:
               </div>
 
               <div className="mt-8 pt-4 border-t border-slate-100 flex justify-end">
-                <Button onClick={() => setShowSettings(false)} className="px-8 bg-slate-900 hover:bg-black">
+                <Button 
+                  onClick={() => {
+                    setShowSettings(false);
+                    if (useCustomApi && customApiKey) {
+                      checkKeyUsage(customApiKey, 'custom');
+                    }
+                  }} 
+                  className="px-8 bg-slate-900 hover:bg-black"
+                >
                   <Check size={16} /> 保存配置
                 </Button>
               </div>
