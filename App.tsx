@@ -11,92 +11,92 @@ import { ImageModal } from './components/ImageModal';
 import { Button } from './components/Button';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { Layers, Wand2, Sparkles, AlertTriangle, AlertCircle, Settings, X, Check, Globe, Key, Smartphone, ArrowRight, Download, ZoomIn, RefreshCw, Hash, Camera, Copy, Monitor, Zap, Box, Shirt } from 'lucide-react';
+import { Layers, Wand2, Sparkles, AlertTriangle, AlertCircle, Settings, X, Check, Globe, Key, Smartphone, ArrowRight, Download, ZoomIn, RefreshCw, Hash, Camera, Copy, Monitor, Zap, Box, Shirt, BookOpen, HelpCircle, CheckCircle2, PlayCircle, Video, Compass } from 'lucide-react';
 
 // Selfie Variations Templates (Single Image -> 8 Variations)
-// 2 Sitting, 2 Kneeling, 2 Squatting, 2 Standing
+// 3 Sitting, 3 Kneeling, 2 Standing
 
 const SELFIE_TEMPLATES = [
+  // 3 坐姿 (Sitting)
   { 
-    label: "地板坐姿 1", 
+    label: "坐姿 1 (地板盘坐)", 
     prompts: [
       "Sitting on the floor, legs crossed comfortably. Mirror selfie style, phone covering face.",
       "Sitting on the floor, one leg extended, one leg bent. Mirror selfie style, phone covering face.",
       "Sitting on the floor, hugging knees to chest. Mirror selfie style, phone covering face.",
-      "Sitting on the floor, leaning forward with elbows on knees. Mirror selfie style, phone covering face.",
-      "Sitting on the floor, butterfly stretch pose (soles of feet together). Mirror selfie style, phone covering face."
+      "Sitting on the floor, leaning back on hands casually. Mirror selfie style, phone covering face."
     ]
   },
   { 
-    label: "地板坐姿 2", 
+    label: "坐姿 2 (椅子/椅靠)", 
     prompts: [
-      "Sitting on the floor, legs extended to the side, leaning on one hand. Mirror selfie style, phone covering face.",
-      "Sitting on the floor, leaning back on hands, legs straight out. Mirror selfie style, phone covering face.",
-      "Sitting on the floor, side saddle pose (legs to one side). Mirror selfie style, phone covering face.",
-      "Sitting on the floor, legs wide apart in a V-shape, hands between legs. Mirror selfie style, phone covering face.",
-      "Sitting on the floor, one leg tucked under, casual pose. Mirror selfie style, phone covering face."
+      "Sitting on a modern chair, legs crossed gracefully. Mirror selfie style, phone covering face.",
+      "Sitting sideways on a stylish chair, casual relaxed posture. Mirror selfie style, phone covering face.",
+      "Sitting on an armchair, leaning against the armrest. Mirror selfie style, phone covering face.",
+      "Sitting on the edge of a chair, fashion pose. Mirror selfie style, phone covering face."
     ]
   },
   { 
-    label: "地板跪姿 1", 
+    label: "坐姿 3 (地板侧坐)", 
     prompts: [
-      "Kneeling on the floor, sitting on heels, cute pose. Mirror selfie style, phone covering face.",
-      "Kneeling on the floor, upright posture, hands on thighs. Mirror selfie style, phone covering face.",
-      "Kneeling on the floor, leaning forward slightly toward the mirror. Mirror selfie style, phone covering face.",
-      "Kneeling on the floor, hands on hips, confident pose. Mirror selfie style, phone covering face.",
-      "Kneeling on the floor, sitting on heels, leaning back slightly on hands. Mirror selfie style, phone covering face."
+      "Sitting on the floor, side saddle pose with legs folded to one side. Mirror selfie style, phone covering face.",
+      "Sitting on the floor, legs in wide V-shape stretch posture. Mirror selfie style, phone covering face.",
+      "Sitting on the floor, one leg tucked in, leaning sideways. Mirror selfie style, phone covering face.",
+      "Sitting on a low sofa, legs curled up comfortably. Mirror selfie style, phone covering face."
+    ]
+  },
+
+  // 3 跪姿 (Kneeling)
+  { 
+    label: "跪姿 1 (地板双膝跪坐)", 
+    prompts: [
+      "Kneeling on the floor, sitting back on heels, neat posture. Mirror selfie style, phone covering face.",
+      "Kneeling on the floor, sitting on heels, hands resting on thighs. Mirror selfie style, phone covering face.",
+      "Kneeling on the floor, sitting on heels, leaning back on hands. Mirror selfie style, phone covering face."
     ]
   },
   { 
-    label: "地板跪姿 2", 
+    label: "跪姿 2 (高跪姿/直立)", 
     prompts: [
-      "Kneeling on one knee (proposing style but casual), fashion pose. Mirror selfie style, phone covering face.",
-      "Kneeling on one knee, other leg extended to side. Mirror selfie style, phone covering face.",
-      "High kneeling pose, engaging core, upright. Mirror selfie style, phone covering face.",
-      "Kneeling on one knee, elbow resting on the raised knee. Mirror selfie style, phone covering face.",
-      "Kneeling on one knee, body turned slightly to the side. Mirror selfie style, phone covering face."
+      "High kneeling posture on the floor, body upright, core engaged. Mirror selfie style, phone covering face.",
+      "High kneeling pose on the floor, hands on hips with confidence. Mirror selfie style, phone covering face.",
+      "Kneeling upright on the floor, leaning slightly forward to the mirror. Mirror selfie style, phone covering face."
     ]
   },
   { 
-    label: "地板蹲姿 1", 
+    label: "跪姿 3 (单膝跪姿)", 
     prompts: [
-      "Squatting on the floor, cool street style vibe. Mirror selfie style, phone covering face.",
-      "Squatting, resting elbows on knees. Mirror selfie style, phone covering face.",
-      "Squatting with feet wide apart. Mirror selfie style, phone covering face.",
-      "Squatting, one leg extended to the side (Cossack squat style). Mirror selfie style, phone covering face.",
-      "Squatting, looking down at the phone, moody vibe. Mirror selfie style, phone covering face."
+      "Kneeling on one knee on the floor, other leg bent at 90 degrees forward. Mirror selfie style, phone covering face.",
+      "Kneeling on one knee, other leg extended outwards to the side. Mirror selfie style, phone covering face.",
+      "Kneeling on one knee, body turned sideways to the mirror. Mirror selfie style, phone covering face."
+    ]
+  },
+
+  // 2 站姿 (Standing)
+  { 
+    label: "站姿 1 (经典姿态)", 
+    prompts: [
+      "Standing pose, facing the mirror with a relaxed and stylish stance. Mirror selfie style, phone covering face.",
+      "Standing pose with one leg slightly forward and weight shifted to back hip. Mirror selfie style, phone covering face.",
+      "Standing pose, feet shoulder-width apart, fashion model posture. Mirror selfie style, phone covering face."
     ]
   },
   { 
-    label: "地板蹲姿 2", 
+    label: "站姿 2 (交叉腿/侧向)", 
     prompts: [
-      "Deep squat on the floor, casual and trendy. Mirror selfie style, phone covering face.",
-      "Squatting on toes, balancing. Mirror selfie style, phone covering face.",
-      "Side squat pose, angled to the mirror. Mirror selfie style, phone covering face.",
-      "Full deep squat (Asian squat), comfortable and grounded. Mirror selfie style, phone covering face.",
-      "Squatting, holding knees with free hand. Mirror selfie style, phone covering face."
-    ]
-  },
-  { 
-    label: "站姿 1", 
-    prompts: [
-      "Standing pose, slight turn to show outfit side profile. Mirror selfie style, phone covering face.",
-      "Standing pose, one leg forward. Mirror selfie style, phone covering face.",
-      "Standing pose, leaning weight on one hip (contrapposto). Mirror selfie style, phone covering face.",
-      "Standing pose, looking back over shoulder slightly. Mirror selfie style, phone covering face.",
-      "Standing pose, leaning against a wall (implied). Mirror selfie style, phone covering face."
-    ]
-  },
-  { 
-    label: "站姿 2", 
-    prompts: [
-      "Standing pose, facing forward, confident stance. Mirror selfie style, phone covering face.",
-      "Standing pose, crossing legs at ankles. Mirror selfie style, phone covering face.",
-      "Standing pose, walking motion (mid-stride). Mirror selfie style, phone covering face.",
-      "Standing pose, hand on hip, power pose. Mirror selfie style, phone covering face.",
-      "Standing pose, wide stance, fashion model vibe. Mirror selfie style, phone covering face."
+      "Standing pose, crossing legs at ankles gracefully. Mirror selfie style, phone covering face.",
+      "Standing pose, body turned 45 degrees to show outfit side profile. Mirror selfie style, phone covering face.",
+      "Standing pose, one hand on hip, dynamic body angle. Mirror selfie style, phone covering face."
     ]
   }
+];
+
+const DEFAULT_CUSTOM_SELFIE_POSES = [
+  "某姿势坐在椅子上",
+  "地板坐姿 (V型延伸)",
+  "地板跪坐 (并拢叠腿)",
+  "沙发侧靠 (交叉翘腿)",
+  "扶手椅坐姿 (透视延伸)"
 ];
 
 const TRYON_PROMPT = `You are an expert AI fashion stylist and photographer.
@@ -160,9 +160,14 @@ const App: React.FC = () => {
   const [generationCount, setGenerationCount] = useState<number>(4); // Default to 4
   
   // Same Pose Variation State
-  const [samePoseSourceImage, setSamePoseSourceImage] = useState<UploadedImage | null>(null);
-  const [samePoseResults, setSamePoseResults] = useState<GenerationResult[]>([]);
-  const [samePoseCount, setSamePoseCount] = useState<number>(8);
+  const [samePoseSourceImages, setSamePoseSourceImages] = useState<UploadedImage[]>([]);
+  const [samePoseResults, setSamePoseResults] = useState<{
+    id: string;
+    sourceIndex: number;
+    varIndex: number;
+    result: GenerationResult;
+  }[]>([]);
+  const [samePoseCount, setSamePoseCount] = useState<number>(4);
   const [samePoseOnlyStanding, setSamePoseOnlyStanding] = useState(true);
   const [samePoseBlockFace, setSamePoseBlockFace] = useState(true);
 
@@ -177,6 +182,10 @@ const App: React.FC = () => {
 
   // Selfie Variation State (New Tab)
   const [selfieSourceImages, setSelfieSourceImages] = useState<UploadedImage[]>([]);
+  const [selfieVarMode, setSelfieVarMode] = useState<'preset' | 'prompt'>('preset');
+  const [selfieCustomPromptsText, setSelfieCustomPromptsText] = useState<string>(
+    DEFAULT_CUSTOM_SELFIE_POSES.join('\n')
+  );
   const [selfieResults, setSelfieResults] = useState<{
     id: string;
     sourceIndex: number;
@@ -184,6 +193,7 @@ const App: React.FC = () => {
     prompts: string[];
     result: GenerationResult;
     prompt: string;
+    selfieMode?: 'preset' | 'prompt';
   }[]>([]);
   const [selfieVarOnlyStanding, setSelfieVarOnlyStanding] = useState(false);
   const [selfieVarBlockFace, setSelfieVarBlockFace] = useState(true);
@@ -202,9 +212,14 @@ const App: React.FC = () => {
   const [tryOnResults, setTryOnResults] = useState<{sourceIndex: number, clothingMode?: 'image' | 'prompt', clothingPrompt?: string, result: GenerationResult, stockingIndex?: number, stockingPreset?: string}[]>([]);
 
   // Pose Transfer State (New Tab)
-  const [poseTransferBaseImage, setPoseTransferBaseImage] = useState<UploadedImage | null>(null);
+  const [poseTransferBaseImages, setPoseTransferBaseImages] = useState<UploadedImage[]>([]);
   const [poseTransferRefImages, setPoseTransferRefImages] = useState<UploadedImage[]>([]);
-  const [poseTransferResults, setPoseTransferResults] = useState<{sourceIndex: number, result: GenerationResult}[]>([]);
+  const [poseTransferResults, setPoseTransferResults] = useState<{
+    id: string;
+    baseIndex: number;
+    poseIndex: number;
+    result: GenerationResult;
+  }[]>([]);
   
   // Text to Image States
   const [textToImagePrompt, setTextToImagePrompt] = useState('');
@@ -223,7 +238,8 @@ const App: React.FC = () => {
   const [progressTotal, setProgressTotal] = useState(0);
   const [apiKeyError, setApiKeyError] = useState(false);
   
-  // Settings state
+  // Settings & Tutorial state
+  const [showTutorial, setShowTutorial] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [useCustomApi, setUseCustomApi] = useState(() => {
     return localStorage.getItem('useCustomApi') === 'true';
@@ -599,9 +615,8 @@ const App: React.FC = () => {
   // --- Same Pose Variations Handlers ---
 
   const handleSamePoseGeneration = async () => {
-    if (!samePoseSourceImage) return;
+    if (samePoseSourceImages.length === 0) return;
 
-    // AI Prompt to intelligently identify and keep the base posture while changing specifics
     let basePrompt = "Identify the character's current general posture category (e.g., standing, sitting on the floor, squatting, kneeling). Keep the character in this EXACT SAME general posture category, but change the specific pose, hand/leg placements, body language, and camera angle to create a completely new and dynamic variation. Maintain clothes and background identity. High quality photorealistic.";
     
     if (samePoseOnlyStanding) {
@@ -612,42 +627,107 @@ const App: React.FC = () => {
       basePrompt += " ENSURE the smartphone is ALWAYS covering the character's face in all variations. The face must be completely obscured by the phone as if taking a mirror selfie.";
     }
 
-    const newResults: GenerationResult[] = Array.from({ length: samePoseCount }).map((_, index) => ({
-      id: `same-pose-${Date.now()}-${index}`,
-      poseId: 'same-pose',
-      status: 'loading'
-    }));
+    const allNewResults: {
+      id: string;
+      sourceIndex: number;
+      varIndex: number;
+      result: GenerationResult;
+    }[] = [];
 
-    setSamePoseResults(newResults);
+    samePoseSourceImages.forEach((sourceImg, sourceIdx) => {
+      Array.from({ length: samePoseCount }).forEach((_, vIdx) => {
+        const id = `same-pose-${Date.now()}-${sourceIdx}-${vIdx}`;
+        allNewResults.push({
+          id,
+          sourceIndex: sourceIdx,
+          varIndex: vIdx,
+          result: {
+            id,
+            poseId: 'same-pose',
+            status: 'loading' as const
+          }
+        });
+      });
+    });
+
+    setSamePoseResults(allNewResults);
     setIsProcessing(true);
+    setProgressCount(0);
+    setProgressTotal(allNewResults.length);
 
     try {
-      await Promise.all(newResults.map(async (resultItem, index) => {
-        try {
-          const variedPrompt = `${basePrompt} (Variation ${index + 1}: make it highly unique and different from other variations).`;
-          const imageUrl = await generateImageEdit(
-            samePoseSourceImage.base64,
-            samePoseSourceImage.mimeType,
-            variedPrompt,
-            commonApiConfig
-          );
+      const chunkSize = 20;
+      for (let i = 0; i < allNewResults.length; i += chunkSize) {
+        const chunk = allNewResults.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async (item) => {
+          let retryCount = 0;
+          const maxRetries = 3;
+          let success = false;
 
-          setSamePoseResults(prev => prev.map(r => 
-            r.id === resultItem.id ? { ...r, status: 'success', imageUrl } : r
-          ));
-        } catch (error: any) {
-          setSamePoseResults(prev => prev.map(r => 
-            r.id === resultItem.id ? { ...r, status: 'error', error: error.message || '生成失败' } : r
-          ));
-        }
-      }));
+          try {
+            while (retryCount <= maxRetries && !success) {
+              try {
+                const sourceImg = samePoseSourceImages[item.sourceIndex];
+                if (!sourceImg) break;
+
+                const variedPrompt = `${basePrompt} (Variation ${item.varIndex + 1}: make it highly unique and different from other variations).`;
+                const imageUrl = await generateImageEdit(
+                  sourceImg.base64,
+                  sourceImg.mimeType,
+                  variedPrompt,
+                  commonApiConfig
+                );
+
+                setSamePoseResults(prev => prev.map(r => 
+                  r.id === item.id 
+                    ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
+                    : r
+                ));
+                success = true;
+                if (useCustomApi && customApiKey) {
+                  checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                }
+              } catch (error: any) {
+                const errorMsg = error.message || '';
+                const isQuotaError = errorMsg.toLowerCase().includes('quota') || errorMsg.includes('额度');
+
+                if (isQuotaError) {
+                  setSamePoseResults(prev => prev.map(r => 
+                    r.id === item.id 
+                      ? { ...r, result: { ...r.result, status: 'error', error: `额度不足: ${errorMsg}` } } 
+                      : r
+                  ));
+                  break;
+                }
+
+                retryCount++;
+                if (retryCount > maxRetries) {
+                  setSamePoseResults(prev => prev.map(r => 
+                    r.id === item.id 
+                      ? { ...r, result: { ...r.result, status: 'error', error: errorMsg || '生成失败' } } 
+                      : r
+                  ));
+                }
+                if (!success && retryCount <= maxRetries) await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+            }
+          } finally {
+            setProgressCount(prev => prev + 1);
+          }
+        }));
+      }
     } finally {
       setIsProcessing(false);
     }
   };
 
   const retrySamePose = async (resultId: string) => {
-    if (!samePoseSourceImage) return;
+    const item = samePoseResults.find(r => r.id === resultId);
+    if (!item) return;
+
+    const sourceImg = samePoseSourceImages[item.sourceIndex];
+    if (!sourceImg) return;
+
     let basePrompt = "Identify the character's current general posture category (e.g., standing, sitting on the floor, squatting, kneeling). Keep the character in this EXACT SAME general posture category, but change the specific pose, hand/leg placements, body language, and camera angle to create a completely new and dynamic variation. Maintain clothes and background identity. High quality photorealistic.";
 
     if (samePoseOnlyStanding) {
@@ -658,51 +738,97 @@ const App: React.FC = () => {
       basePrompt += " ENSURE the smartphone is ALWAYS covering the character's face in all variations. The face must be completely obscured by the phone as if taking a mirror selfie.";
     }
 
-    setSamePoseResults(prev => prev.map(r => r.id === resultId ? { ...r, status: 'loading', error: undefined } : r));
+    setSamePoseResults(prev => prev.map(r => r.id === resultId ? { ...r, result: { ...r.result, status: 'loading', error: undefined } } : r));
     try {
       const variedPrompt = `${basePrompt} (Variation Retry ${Date.now()}).`;
       const imageUrl = await generateImageEdit(
-        samePoseSourceImage.base64,
-        samePoseSourceImage.mimeType,
+        sourceImg.base64,
+        sourceImg.mimeType,
         variedPrompt,
         commonApiConfig
       );
-      setSamePoseResults(prev => prev.map(r => r.id === resultId ? { ...r, status: 'success', imageUrl } : r));
+      setSamePoseResults(prev => prev.map(r => r.id === resultId ? { ...r, result: { ...r.result, status: 'success', imageUrl } } : r));
+      if (useCustomApi && customApiKey) {
+        checkKeyUsage(customApiKey, 'custom').catch(() => {});
+      }
     } catch (error: any) {
-      setSamePoseResults(prev => prev.map(r => r.id === resultId ? { ...r, status: 'error', error: error.message } : r));
+      setSamePoseResults(prev => prev.map(r => r.id === resultId ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Retry failed' } } : r));
     }
+  };
+
+  const downloadAllSamePoseResults = async () => {
+    const downloadData = samePoseResults
+      .filter(r => r.result.status === 'success' && r.result.imageUrl)
+      .map(r => ({
+        imageUrl: r.result.imageUrl,
+        status: r.result.status,
+        originalImage: samePoseSourceImages[r.sourceIndex],
+        groupName: `image_${r.sourceIndex + 1}`,
+        name: `variation_${r.varIndex + 1}`
+      }));
+    
+    if (downloadData.length === 0) return;
+    await downloadResultsAsZip(downloadData, 'same_pose_variations');
   };
 
   const handleSelfieVariationsGeneration = async () => {
     if (selfieSourceImages.length === 0) return;
 
-    const availableTemplates = selfieVarOnlyStanding 
-      ? SELFIE_TEMPLATES.filter(t => t.label.includes('站姿'))
-      : SELFIE_TEMPLATES;
-
     const allNewResults: typeof selfieResults = [];
 
-    selfieSourceImages.forEach((sourceImg, sourceIdx) => {
-      Array.from({ length: 8 }).forEach((_, index) => {
-        const templateIndex = index % availableTemplates.length;
-        const template = availableTemplates[templateIndex];
-        const randomPrompt = template.prompts[Math.floor(Math.random() * template.prompts.length)];
-        const id = `selfie-var-${Date.now()}-${sourceIdx}-${index}`;
-        
-        allNewResults.push({
-          id,
-          sourceIndex: sourceIdx,
-          templateLabel: template.label,
-          prompts: template.prompts,
-          prompt: randomPrompt,
-          result: {
+    if (selfieVarMode === 'preset') {
+      const availableTemplates = selfieVarOnlyStanding 
+        ? SELFIE_TEMPLATES.filter(t => t.label.includes('站姿'))
+        : SELFIE_TEMPLATES;
+
+      selfieSourceImages.forEach((sourceImg, sourceIdx) => {
+        Array.from({ length: 8 }).forEach((_, index) => {
+          const templateIndex = index % availableTemplates.length;
+          const template = availableTemplates[templateIndex];
+          const randomPrompt = template.prompts[Math.floor(Math.random() * template.prompts.length)];
+          const id = `selfie-var-${Date.now()}-${sourceIdx}-${index}`;
+          
+          allNewResults.push({
             id,
-            poseId: 'selfie-var',
-            status: 'loading' as const
-          }
+            sourceIndex: sourceIdx,
+            templateLabel: template.label,
+            prompts: template.prompts,
+            prompt: randomPrompt,
+            selfieMode: 'preset',
+            result: {
+              id,
+              poseId: 'selfie-var',
+              status: 'loading' as const
+            }
+          });
         });
       });
-    });
+    } else {
+      const userPrompts = selfieCustomPromptsText
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean);
+      const finalPrompts = userPrompts.length > 0 ? userPrompts : DEFAULT_CUSTOM_SELFIE_POSES;
+
+      selfieSourceImages.forEach((sourceImg, sourceIdx) => {
+        finalPrompts.forEach((posePrompt, pIdx) => {
+          const id = `selfie-var-${Date.now()}-${sourceIdx}-${pIdx}`;
+          allNewResults.push({
+            id,
+            sourceIndex: sourceIdx,
+            templateLabel: posePrompt,
+            prompts: [posePrompt],
+            prompt: posePrompt,
+            selfieMode: 'prompt',
+            result: {
+              id,
+              poseId: 'selfie-var',
+              status: 'loading' as const
+            }
+          });
+        });
+      });
+    }
 
     setSelfieResults(allNewResults);
     setIsProcessing(true);
@@ -734,7 +860,7 @@ const App: React.FC = () => {
                   finalPrompt += "Ensure the face is clearly visible, not blocked by the phone. ";
                 }
                 
-                if (selfieVarOnlyStanding) {
+                if (selfieVarOnlyStanding && item.selfieMode === 'preset') {
                   finalPrompt += "Focus on unique hand gestures and arm placements while standing. ";
                 }
 
@@ -803,7 +929,9 @@ const App: React.FC = () => {
 
     try {
       const sourceImage = selfieSourceImages[item.sourceIndex];
-      const newRandomPrompt = item.prompts[Math.floor(Math.random() * item.prompts.length)];
+      const newRandomPrompt = (item.prompts && item.prompts.length > 0)
+        ? item.prompts[Math.floor(Math.random() * item.prompts.length)]
+        : item.prompt;
 
       let promptText = newRandomPrompt;
       if (!selfieVarBlockFace) {
@@ -817,7 +945,7 @@ const App: React.FC = () => {
          finalPrompt += "Ensure the face is clearly visible, not blocked by the phone. ";
       }
       
-      if (selfieVarOnlyStanding) {
+      if (selfieVarOnlyStanding && item.selfieMode === 'preset') {
          finalPrompt += "Focus on unique hand gestures and arm placements while standing. ";
       }
 
@@ -1009,84 +1137,128 @@ const App: React.FC = () => {
   // --- Pose Transfer Handlers ---
 
   const handlePoseTransferGeneration = async () => {
-    if (!poseTransferBaseImage || poseTransferRefImages.length === 0) return;
+    if (poseTransferBaseImages.length === 0 || poseTransferRefImages.length === 0) return;
 
-    const newResults = poseTransferRefImages.map((_, index) => ({
-      sourceIndex: index,
-      result: {
-        id: `pose-transfer-${Date.now()}-${index}`,
-        poseId: 'pose-transfer',
-        status: 'loading' as const
-      }
-    }));
+    const newResults = poseTransferBaseImages.map((_, baseIdx) => {
+      const randomPoseIdx = Math.floor(Math.random() * poseTransferRefImages.length);
+      const id = `pose-transfer-${Date.now()}-${baseIdx}`;
+      return {
+        id,
+        baseIndex: baseIdx,
+        poseIndex: randomPoseIdx,
+        result: {
+          id,
+          poseId: 'pose-transfer',
+          status: 'loading' as const
+        }
+      };
+    });
 
     setPoseTransferResults(newResults);
     setIsProcessing(true);
+    setProgressCount(0);
+    setProgressTotal(newResults.length);
 
     try {
-      // Calculate aspect ratio from base image
-      const dims = await getImageDimensions(poseTransferBaseImage.base64, poseTransferBaseImage.mimeType);
-      const aspectRatio = getClosestAspectRatio(dims.width, dims.height);
+      const chunkSize = 20;
+      for (let i = 0; i < newResults.length; i += chunkSize) {
+        const chunk = newResults.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async (item) => {
+          let retryCount = 0;
+          const maxRetries = 3;
+          let success = false;
 
-      await Promise.all(newResults.map(async (item, index) => {
-        try {
-          const refImage = poseTransferRefImages[index];
-          
-          const imageUrl = await generatePoseTransfer(
-            poseTransferBaseImage.base64,
-            poseTransferBaseImage.mimeType,
-            refImage.base64,
-            refImage.mimeType,
-            { ...commonApiConfig, aspectRatio }
-          );
+          try {
+            while (retryCount <= maxRetries && !success) {
+              try {
+                const baseImg = poseTransferBaseImages[item.baseIndex];
+                const refImg = poseTransferRefImages[item.poseIndex];
+                if (!baseImg || !refImg) break;
 
-          setPoseTransferResults(prev => prev.map(r => 
-            r.sourceIndex === index 
-              ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
-              : r
-          ));
-          if (useCustomApi && customApiKey) {
-            checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                const dims = await getImageDimensions(baseImg.base64, baseImg.mimeType);
+                const aspectRatio = getClosestAspectRatio(dims.width, dims.height);
+
+                const imageUrl = await generatePoseTransfer(
+                  baseImg.base64,
+                  baseImg.mimeType,
+                  refImg.base64,
+                  refImg.mimeType,
+                  { ...commonApiConfig, aspectRatio }
+                );
+
+                setPoseTransferResults(prev => prev.map(r => 
+                  r.id === item.id 
+                    ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
+                    : r
+                ));
+                success = true;
+                if (useCustomApi && customApiKey) {
+                  checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                }
+              } catch (error: any) {
+                const errorMsg = error.message || '';
+                const isQuotaError = errorMsg.toLowerCase().includes('quota') || errorMsg.includes('额度');
+
+                if (isQuotaError) {
+                  setPoseTransferResults(prev => prev.map(r => 
+                    r.id === item.id 
+                      ? { ...r, result: { ...r.result, status: 'error', error: `额度不足: ${errorMsg}` } } 
+                      : r
+                  ));
+                  break;
+                }
+
+                retryCount++;
+                if (retryCount > maxRetries) {
+                  setPoseTransferResults(prev => prev.map(r => 
+                    r.id === item.id 
+                      ? { ...r, result: { ...r.result, status: 'error', error: errorMsg || 'Generation failed' } } 
+                      : r
+                  ));
+                }
+                if (!success && retryCount <= maxRetries) await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+            }
+          } finally {
+            setProgressCount(prev => prev + 1);
           }
-        } catch (error: any) {
-           setPoseTransferResults(prev => prev.map(r => 
-            r.sourceIndex === index 
-              ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
-              : r
-          ));
-        }
-      }));
+        }));
+      }
     } catch (error) {
-      console.error("Failed to get image dimensions", error);
+      console.error("Failed pose transfer generation", error);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleRegeneratePoseTransferItem = async (sourceIndex: number) => {
-    if (!poseTransferBaseImage || !poseTransferRefImages[sourceIndex]) return;
+  const handleRegeneratePoseTransferItem = async (id: string) => {
+    const item = poseTransferResults.find(r => r.id === id);
+    if (!item) return;
 
     setPoseTransferResults(prev => prev.map(r => 
-      r.sourceIndex === sourceIndex 
+      r.id === id 
         ? { ...r, result: { ...r.result, status: 'loading', error: undefined } } 
         : r
     ));
 
     try {
-      const dims = await getImageDimensions(poseTransferBaseImage.base64, poseTransferBaseImage.mimeType);
+      const baseImg = poseTransferBaseImages[item.baseIndex];
+      const refImg = poseTransferRefImages[item.poseIndex];
+      if (!baseImg || !refImg) return;
+
+      const dims = await getImageDimensions(baseImg.base64, baseImg.mimeType);
       const aspectRatio = getClosestAspectRatio(dims.width, dims.height);
-      const refImage = poseTransferRefImages[sourceIndex];
-      
+
       const imageUrl = await generatePoseTransfer(
-        poseTransferBaseImage.base64,
-        poseTransferBaseImage.mimeType,
-        refImage.base64,
-        refImage.mimeType,
+        baseImg.base64,
+        baseImg.mimeType,
+        refImg.base64,
+        refImg.mimeType,
         { ...commonApiConfig, aspectRatio }
       );
 
       setPoseTransferResults(prev => prev.map(r => 
-        r.sourceIndex === sourceIndex 
+        r.id === id 
           ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
           : r
       ));
@@ -1095,11 +1267,26 @@ const App: React.FC = () => {
       }
     } catch (error: any) {
       setPoseTransferResults(prev => prev.map(r => 
-        r.sourceIndex === sourceIndex 
+        r.id === id 
           ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Generation failed' } } 
           : r
       ));
     }
+  };
+
+  const downloadAllPoseTransferResults = async () => {
+    const downloadData = poseTransferResults
+      .filter(r => r.result.status === 'success' && r.result.imageUrl)
+      .map(r => ({
+        imageUrl: r.result.imageUrl,
+        status: r.result.status,
+        originalImage: poseTransferBaseImages[r.baseIndex],
+        groupName: `base_${r.baseIndex + 1}`,
+        name: `pose_${r.poseIndex + 1}`
+      }));
+    
+    if (downloadData.length === 0) return;
+    await downloadResultsAsZip(downloadData, 'pose_transfer_results');
   };
 
   // --- Text to Image Handlers ---
@@ -1910,6 +2097,14 @@ Task:
               </div>
             ) : null}
 
+            <button
+              onClick={() => setShowTutorial(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-pink-500 via-rose-500 to-indigo-600 hover:from-pink-600 hover:to-indigo-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all hover:shadow hover:scale-105 cursor-pointer"
+              title="查看抖音短视频3大出图工作流指南"
+            >
+              <BookOpen size={15} />
+              <span>发抖音教程</span>
+            </button>
             <div className={`hidden sm:block text-xs font-medium px-3 py-1 rounded-full ${useCustomApi ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
               {useCustomApi ? '自定义 API' : '官方 Gemini'}
             </div>
@@ -2052,7 +2247,256 @@ Task:
         </div>
       )}
 
+       {/* Tutorial Modal */}
+      {showTutorial && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+          <div className="bg-white border border-slate-200 shadow-2xl rounded-3xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex justify-between items-center relative overflow-hidden">
+              <div className="relative z-10 flex items-center gap-3">
+                <div className="p-3 bg-pink-500/20 text-pink-400 border border-pink-500/30 rounded-2xl flex items-center justify-center">
+                  <PlayCircle size={30} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-pink-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      抖音爆款指南
+                    </span>
+                    <h2 className="text-xl font-bold text-white">抖音出图发帖 3 大黄金工作流教程</h2>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1">
+                    针对模特换装、保持沙发/椅子场景一致性、爆款姿势模仿等不同场景的完整出图步骤
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowTutorial(false)}
+                className="relative z-10 text-slate-400 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto space-y-6 bg-slate-50/50 flex-1">
+              {/* Flow 1 */}
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 bg-blue-600 text-white text-[11px] font-bold px-4 py-1 rounded-bl-xl">
+                  流程 1：极速秒发流
+                </div>
+                <div className="flex items-center gap-2 text-blue-600 font-bold text-lg mb-2">
+                  <Zap size={20} />
+                  <span>模特换装 ➔ 自拍变身 (预设8大姿势)</span>
+                </div>
+                <p className="text-slate-600 text-xs mb-4 leading-relaxed">
+                  <strong className="text-slate-800">核心原理：</strong>无特殊场地与家具依赖，先换上新品服装，然后直接在【自拍变身】使用预设的 8 大姿势（3坐姿/3跪姿/2站姿）一键批量生成 8 张不同姿势着装照，直接发布抖音！
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+                  <div className="bg-blue-50/60 border border-blue-100 p-3.5 rounded-xl">
+                    <div className="text-xs font-bold text-blue-700 mb-1 flex items-center gap-1">
+                      <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px]">1</span>
+                      模特换装
+                    </div>
+                    <p className="text-[12px] text-slate-600">在【模特换装】上传模特图与服装图，一键为模特穿上新品。</p>
+                  </div>
+                  <div className="bg-blue-50/60 border border-blue-100 p-3.5 rounded-xl">
+                    <div className="text-xs font-bold text-blue-700 mb-1 flex items-center gap-1">
+                      <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px]">2</span>
+                      自拍变身 (预设8姿势)
+                    </div>
+                    <p className="text-[12px] text-slate-600">上传换装图至【自拍变身】，选择“预设8大姿势”（含3坐姿/3跪姿/2站姿）。</p>
+                  </div>
+                  <div className="bg-blue-50/60 border border-blue-100 p-3.5 rounded-xl">
+                    <div className="text-xs font-bold text-blue-700 mb-1 flex items-center gap-1">
+                      <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px]">3</span>
+                      一键出图发抖音
+                    </div>
+                    <p className="text-[12px] text-slate-600">批量生成 8 张高质感不同角度美图，一键打包 ZIP 下载并发布！</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => { setActiveTab('try_on'); setShowTutorial(false); }}
+                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>👉 立即前往【模特换装】</span>
+                    <ArrowRight size={14} />
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('selfie_var'); setShowTutorial(false); }}
+                    className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>👉 立即前往【自拍变身】</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Flow 2 */}
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 bg-teal-600 text-white text-[11px] font-bold px-4 py-1 rounded-bl-xl">
+                  流程 2：场景与道具一致性流
+                </div>
+                <div className="flex items-center gap-2 text-teal-700 font-bold text-lg mb-2">
+                  <Box size={20} />
+                  <span>模特换装 ➔ 自拍变身 (自定义姿势提示词) ➔ 同姿势变体</span>
+                </div>
+                <p className="text-slate-600 text-xs mb-4 leading-relaxed">
+                  <strong className="text-slate-800">核心原理：</strong>当生成过程中涉及沙发、椅子、床铺等重要道具/背景时，先用自定义提示词生成一张包含该道具的理想样图。再把样图放入【同姿势变体】中，AI 将在锁定沙发/椅子一致的前提下，批量改变肢体动作与拍摄视角！
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+                  <div className="bg-teal-50/60 border border-teal-100 p-3.5 rounded-xl">
+                    <div className="text-xs font-bold text-teal-700 mb-1 flex items-center gap-1">
+                      <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[11px]">1</span>
+                      模特换装
+                    </div>
+                    <p className="text-[12px] text-slate-600">先在【模特换装】中为模特换上目标衣服，生成换装基础图。</p>
+                  </div>
+                  <div className="bg-teal-50/60 border border-teal-100 p-3.5 rounded-xl">
+                    <div className="text-xs font-bold text-teal-700 mb-1 flex items-center gap-1">
+                      <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[11px]">2</span>
+                      自定义场景与道具提示词
+                    </div>
+                    <p className="text-[12px] text-slate-600">在【自拍变身】切换至“自定义姿势提示词”，输入期望的场景道具（如“坐在复古真皮沙发上”），生成满意样图。</p>
+                  </div>
+                  <div className="bg-teal-50/60 border border-teal-100 p-3.5 rounded-xl">
+                    <div className="text-xs font-bold text-teal-700 mb-1 flex items-center gap-1">
+                      <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[11px]">3</span>
+                      同姿势变体 (锁死沙发/椅子)
+                    </div>
+                    <p className="text-[12px] text-slate-600">把样图批量放入【同姿势变体】，AI 将完美保持沙发/椅子形态一致，同时批量改变姿势和视角并导出发布！</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => { setActiveTab('try_on'); setShowTutorial(false); }}
+                    className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>👉 去【模特换装】</span>
+                    <ArrowRight size={14} />
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('selfie_var'); setShowTutorial(false); }}
+                    className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>👉 去【自拍变身】</span>
+                    <ArrowRight size={14} />
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('same_pose'); setShowTutorial(false); }}
+                    className="px-3.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>👉 去【同姿势变体】</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Flow 3 */}
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 bg-purple-600 text-white text-[11px] font-bold px-4 py-1 rounded-bl-xl">
+                  流程 3：爆款姿势模仿与扩展流
+                </div>
+                <div className="flex items-center gap-2 text-purple-700 font-bold text-lg mb-2">
+                  <Sparkles size={20} />
+                  <span>模特换装 ➔ 姿势迁移 ➔ 同姿势变体</span>
+                </div>
+                <p className="text-slate-600 text-xs mb-4 leading-relaxed">
+                  <strong className="text-slate-800">核心原理：</strong>精准模仿你指定的爆款参考图姿势，然后将迁移出的结果图批量导入【同姿势变体】，在锁定指定姿势和沙发/椅子道具的前提下，批量改变镜头细节与微动作！
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+                  <div className="bg-purple-50/60 border border-purple-100 p-3.5 rounded-xl">
+                    <div className="text-xs font-bold text-purple-700 mb-1 flex items-center gap-1">
+                      <span className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center text-[11px]">1</span>
+                      模特换装
+                    </div>
+                    <p className="text-[12px] text-slate-600">完成模特换装，生成包含目标服装的基础图。</p>
+                  </div>
+                  <div className="bg-purple-50/60 border border-purple-100 p-3.5 rounded-xl">
+                    <div className="text-xs font-bold text-purple-700 mb-1 flex items-center gap-1">
+                      <span className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center text-[11px]">2</span>
+                      姿势迁移
+                    </div>
+                    <p className="text-[12px] text-slate-600">在【姿势迁移】上传对标账号的爆款参考图，将换装图精准转化为指定的目标姿势。</p>
+                  </div>
+                  <div className="bg-purple-50/60 border border-purple-100 p-3.5 rounded-xl">
+                    <div className="text-xs font-bold text-purple-700 mb-1 flex items-center gap-1">
+                      <span className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center text-[11px]">3</span>
+                      同姿势变体 (批量丰富细节)
+                    </div>
+                    <p className="text-[12px] text-slate-600">把迁移后的图批量上传到【同姿势变体】，在锁死指定姿势和沙发/椅子道具的同时，衍生多角度变体并下载发抖音！</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => { setActiveTab('try_on'); setShowTutorial(false); }}
+                    className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>👉 去【模特换装】</span>
+                    <ArrowRight size={14} />
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('pose_transfer'); setShowTutorial(false); }}
+                    className="px-3.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>👉 去【姿势迁移】</span>
+                    <ArrowRight size={14} />
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('same_pose'); setShowTutorial(false); }}
+                    className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>👉 去【同姿势变体】</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-white border-t border-slate-200 flex justify-end">
+              <Button onClick={() => setShowTutorial(false)} className="px-8 bg-slate-900 hover:bg-black">
+                <CheckCircle2 size={16} /> 我知道了，开始创作
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-6xl mx-auto px-4 py-8">
+        
+        {/* Banner with tutorial shortcut */}
+        <div className="mb-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-lg border border-indigo-900/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-pink-500/20 text-pink-400 border border-pink-500/30 rounded-xl hidden sm:flex items-center justify-center">
+              <PlayCircle size={28} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="bg-pink-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  抖音出图全流程
+                </span>
+                <h3 className="font-bold text-base text-white">发抖音 3 大黄金工作流教程指南</h3>
+              </div>
+              <p className="text-xs text-slate-300 mt-1 max-w-2xl">
+                包含极速秒发流、沙发/椅子场景道具一致性流、以及爆款姿势模仿扩展流。一键查看详细玩法说明！
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowTutorial(true)}
+            className="w-full sm:w-auto px-4 py-2 bg-pink-500 hover:bg-pink-600 active:bg-pink-700 text-white font-semibold text-xs rounded-xl shadow transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+          >
+            <BookOpen size={15} />
+            查看教程与流程指南
+          </button>
+        </div>
         
         {/* Navigation Tabs */}
         <div className="flex flex-col items-center gap-6 mb-8">
@@ -2284,24 +2728,27 @@ Task:
                             <div className="inline-flex justify-center items-center w-12 h-12 bg-teal-100 text-teal-600 rounded-full mb-3">
                                 <Copy size={24} />
                             </div>
-                            <h2 className="text-xl font-bold text-slate-800">同姿势智能变体</h2>
-                            <p className="text-slate-500 text-sm mt-1">自动识别原图基础姿势（如站立、坐地等），在保持姿势类别不变的前提下，生成具有不同肢体动作和角度的全新照片。</p>
+                            <h2 className="text-xl font-bold text-slate-800">同姿势智能变体 (批量)</h2>
+                            <p className="text-slate-500 text-sm mt-1">自动识别原图基础姿势（如站立、坐地等），在保持姿势类别不变的前提下，为每张图片生成具有不同肢体动作和角度的全新变体照片。</p>
                         </div>
                         
-                        <ImageUploader 
-                            currentImage={samePoseSourceImage} 
-                            onImageSelected={(img) => {
-                                setSamePoseSourceImage(img);
+                        <BatchImageUploader 
+                            currentImages={samePoseSourceImages} 
+                            onImagesSelected={(imgs) => {
+                                setSamePoseSourceImages(imgs);
                                 setSamePoseResults([]);
                             }} 
+                            maxImages={50}
+                            title="上传原图 (批量)"
+                            subtitle="支持多选上传最多50张图片，每张图都会独立生成姿势变体"
                         />
                         
-                        {samePoseSourceImage && (
+                        {samePoseSourceImages.length > 0 && (
                              <div className="mt-6 flex flex-col items-center gap-6 animate-in fade-in slide-in-from-bottom-2">
                                 {/* Generation Count Selector for Same Pose */}
                                 <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
                                     <span className="text-sm font-medium text-slate-600 flex items-center gap-1">
-                                        生成变体数量:
+                                        每张图生成变体数量:
                                     </span>
                                     <div className="flex items-center gap-3 ml-2">
                                         <input 
@@ -2348,10 +2795,11 @@ Task:
                                 <Button 
                                     onClick={handleSamePoseGeneration} 
                                     isLoading={isProcessing}
+                                    disabled={isProcessing || samePoseSourceImages.length === 0}
                                     className="px-10 py-3 text-lg bg-teal-600 hover:bg-teal-700 shadow-lg hover:shadow-teal-200/50"
                                 >
                                     <Sparkles size={20} />
-                                    生成 {samePoseCount} 张同姿势变体
+                                    {isProcessing ? `正在生成 (${progressCount}/${progressTotal})...` : `一键生成 ${samePoseSourceImages.length * samePoseCount} 张同姿势变体`}
                                 </Button>
                             </div>
                         )}
@@ -2359,22 +2807,93 @@ Task:
 
                     {/* Results for Same Pose Variations */}
                     {samePoseResults.length > 0 && (
-                        <div className="animate-in fade-in slide-in-from-bottom-4">
-                            <div className="flex justify-between items-center mb-4 px-1">
+                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                            <div className="flex justify-between items-center px-1">
                                 <h3 className="text-lg font-bold text-slate-800">生成结果列表</h3>
                                 <button 
-                                    onClick={() => downloadAll(samePoseResults.map(r => r.imageUrl).filter(Boolean) as string[], 'same-pose')}
-                                    className="flex items-center gap-2 px-4 py-2 bg-teal-100 text-teal-700 rounded-lg font-medium hover:bg-teal-200 transition-colors text-sm"
+                                    onClick={downloadAllSamePoseResults}
+                                    disabled={!samePoseResults.some(r => r.result.status === 'success')}
+                                    className="flex items-center gap-2 px-4 py-2 bg-teal-100 text-teal-700 rounded-lg font-medium hover:bg-teal-200 transition-colors text-sm disabled:opacity-50"
                                 >
                                     <Download size={16} />
-                                    一键下载全部
+                                    一键下载全部 (ZIP)
                                 </button>
                             </div>
-                            <ResultGrid 
-                                results={samePoseResults} 
-                                onRetry={retrySamePose} 
-                                onImageClick={setViewImageUrl}
-                            />
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {samePoseResults.map((item) => {
+                                    const sourceImg = samePoseSourceImages[item.sourceIndex];
+                                    const { result } = item;
+                                    
+                                    return (
+                                        <div key={item.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col">
+                                            <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                                                <span className="font-medium text-slate-600 text-sm">图片 #{item.sourceIndex + 1} - 变体 #{item.varIndex + 1}</span>
+                                                <button 
+                                                    onClick={() => retrySamePose(item.id)}
+                                                    disabled={result.status === 'loading'}
+                                                    className="text-slate-400 hover:text-teal-600 disabled:opacity-50 transition-colors flex items-center gap-1 text-xs"
+                                                >
+                                                    <RefreshCw size={14} className={result.status === 'loading' ? 'animate-spin' : ''} />
+                                                    重新生成
+                                                </button>
+                                            </div>
+                                            <div className="p-4 grid grid-cols-2 gap-2 h-64">
+                                                {/* Source */}
+                                                <div className="relative rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center">
+                                                    {sourceImg && (
+                                                        <img 
+                                                            src={`data:${sourceImg.mimeType};base64,${sourceImg.base64}`} 
+                                                            className="w-full h-full object-cover" 
+                                                            alt="Source" 
+                                                        />
+                                                    )}
+                                                    <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">原图</div>
+                                                </div>
+
+                                                {/* Result */}
+                                                <div className="relative rounded-lg overflow-hidden bg-slate-50 border border-slate-100 flex items-center justify-center group">
+                                                    {result.status === 'loading' && (
+                                                        <div className="w-8 h-8 border-2 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
+                                                    )}
+                                                    {result.status === 'error' && (
+                                                        <div className="text-red-400 text-xs text-center p-2">
+                                                            <AlertCircle size={20} className="mx-auto mb-1" />
+                                                            {result.error || '生成失败'}
+                                                        </div>
+                                                    )}
+                                                    {result.status === 'success' && result.imageUrl && (
+                                                        <>
+                                                            <img 
+                                                                src={result.imageUrl} 
+                                                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
+                                                                alt="Result" 
+                                                                onClick={() => setViewImageUrl(result.imageUrl!)}
+                                                                loading="lazy"
+                                                            />
+                                                            <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <button 
+                                                                    className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
+                                                                    onClick={() => setViewImageUrl(result.imageUrl!)}
+                                                                >
+                                                                    <ZoomIn size={14} />
+                                                                </button>
+                                                                <a 
+                                                                    href={result.imageUrl}
+                                                                    download={`same-pose-${item.sourceIndex + 1}-${item.varIndex + 1}.png`}
+                                                                    className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
+                                                                >
+                                                                    <Download size={14} />
+                                                                </a>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -2389,8 +2908,79 @@ Task:
                                 <Camera size={24} />
                             </div>
                             <h2 className="text-xl font-bold text-slate-800">自拍变身模式</h2>
-                            <p className="text-slate-500 text-sm mt-1">上传多张图片（最多50张），AI 为每一张图自动生成 8张不同姿势变体，并全程保持手机挡脸。支持一次最多并行生成50个，效率翻倍。</p>
+                            <p className="text-slate-500 text-sm mt-1">上传多张图片（最多50张），AI 为每一张图自动生成姿势变体，并全程保持手机挡脸。支持并行高效生成。</p>
                         </div>
+
+                        {/* Mode Toggle */}
+                        <div className="flex bg-slate-100 p-1.5 rounded-xl max-w-md mx-auto mb-6 border border-slate-200">
+                            <button
+                                type="button"
+                                onClick={() => setSelfieVarMode('preset')}
+                                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${
+                                    selfieVarMode === 'preset'
+                                        ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/60'
+                                        : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                            >
+                                <Layers size={16} />
+                                预设 8 大姿势 (3坐/3跪/2站)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSelfieVarMode('prompt')}
+                                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${
+                                    selfieVarMode === 'prompt'
+                                        ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/60'
+                                        : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                            >
+                                <Wand2 size={16} />
+                                自定义姿势提示词
+                            </button>
+                        </div>
+
+                        {/* Custom Prompts Textarea */}
+                        {selfieVarMode === 'prompt' && (
+                            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4 mb-6 text-left animate-in fade-in slide-in-from-top-2">
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+                                            <Sparkles size={16} className="text-indigo-500" />
+                                            自定义姿势提示词列表（每行一个姿势）：
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelfieCustomPromptsText(DEFAULT_CUSTOM_SELFIE_POSES.join('\n'))}
+                                            className="text-xs text-indigo-600 hover:text-indigo-700 underline font-medium"
+                                        >
+                                            恢复默认 5 个姿势提示词
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        value={selfieCustomPromptsText}
+                                        onChange={(e) => setSelfieCustomPromptsText(e.target.value)}
+                                        rows={5}
+                                        placeholder="请输入想要的姿势提示词，每行写一个姿势..."
+                                        className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm text-slate-800 font-medium leading-relaxed shadow-sm"
+                                    />
+                                </div>
+                                <div className="flex items-center justify-between border-t border-slate-200/60 pt-3 text-xs text-slate-500">
+                                    <span>
+                                        当前有效姿势数量：
+                                        <strong className="text-indigo-600 font-bold ml-1">
+                                            {selfieCustomPromptsText.split('\n').map(s => s.trim()).filter(Boolean).length || 5}
+                                        </strong> 个
+                                    </span>
+                                    <span>
+                                        每张底图生成 
+                                        <strong className="text-indigo-600 font-bold mx-1">
+                                            {selfieCustomPromptsText.split('\n').map(s => s.trim()).filter(Boolean).length || 5}
+                                        </strong>
+                                        张姿势变体
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                         
                         <div className="space-y-6 text-left">
                            <BatchImageUploader 
@@ -2401,7 +2991,7 @@ Task:
                                 }}
                                 maxImages={50}
                                 title="上传自拍底图 (批量)"
-                                subtitle="上传后，每一张图都会生成8个姿势变体"
+                                subtitle={selfieVarMode === 'preset' ? "上传后，每一张图都会生成 8 个姿势变体 (3坐姿/3跪姿/2站姿)" : "上传后，每一张图都会根据上述自定义姿势生成对应变体"}
                             />
                         </div>
                         
@@ -2409,17 +2999,19 @@ Task:
                             <div className="mt-6 space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
                                 <h3 className="text-sm font-bold text-slate-700">生成选项</h3>
                                 
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm text-slate-600 flex items-center gap-2 cursor-pointer">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={selfieVarOnlyStanding}
-                                            onChange={(e) => setSelfieVarOnlyStanding(e.target.checked)}
-                                            className="rounded text-indigo-600 focus:ring-indigo-500"
-                                        />
-                                        只生成不同的站姿和手势
-                                    </label>
-                                </div>
+                                {selfieVarMode === 'preset' && (
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm text-slate-600 flex items-center gap-2 cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={selfieVarOnlyStanding}
+                                                onChange={(e) => setSelfieVarOnlyStanding(e.target.checked)}
+                                                className="rounded text-indigo-600 focus:ring-indigo-500"
+                                            />
+                                            只生成不同的站姿和手势
+                                        </label>
+                                    </div>
+                                )}
 
                                 <div className="flex items-center justify-between">
                                     <label className="text-sm text-slate-600 flex items-center gap-2 cursor-pointer">
@@ -2443,7 +3035,10 @@ Task:
                                     className="px-10 py-3 text-lg bg-indigo-600 hover:bg-indigo-700 shadow-lg hover:shadow-indigo-200/50"
                                 >
                                     <Sparkles size={20} />
-                                    一键生成 {selfieSourceImages.length * 8} 张自拍变体
+                                    {selfieVarMode === 'preset'
+                                        ? `一键生成 ${selfieSourceImages.length * 8} 张自拍变体 (3坐/3跪/2站)`
+                                        : `一键生成 ${selfieSourceImages.length * (selfieCustomPromptsText.split('\n').map(s => s.trim()).filter(Boolean).length || 5)} 张自拍变体 (自定义姿势)`
+                                    }
                                 </Button>
                             </div>
                         )}
@@ -3148,14 +3743,20 @@ Task:
                                 <span className="bg-teal-100 text-teal-700 p-1.5 rounded-lg">
                                     <Camera size={20} />
                                 </span>
-                                上传底图 (保持人物)
+                                上传底图 (批量，最多50张)
                             </h2>
                             <p className="text-sm text-slate-500 mb-6">
-                                上传一张包含人物的底图，AI 将保持该人物的身份、面部特征、服装和背景风格。
+                                上传多张底图，AI 将保持各底图人物的身份和背景风格，并为每张底图随机匹配一个上传的姿势进行迁移。
                             </p>
-                            <ImageUploader 
-                                onImageSelected={setPoseTransferBaseImage} 
-                                currentImage={poseTransferBaseImage} 
+                            <BatchImageUploader 
+                                onImagesSelected={(imgs) => {
+                                    setPoseTransferBaseImages(imgs);
+                                    setPoseTransferResults([]);
+                                }} 
+                                currentImages={poseTransferBaseImages} 
+                                maxImages={50}
+                                title="上传底图 (批量)"
+                                subtitle="支持多选上传最多50张底图"
                             />
                         </div>
 
@@ -3168,12 +3769,17 @@ Task:
                                 上传姿势参考图 (最多15张)
                             </h2>
                             <p className="text-sm text-slate-500 mb-6">
-                                上传包含目标姿势的参考图。底图中的人物将分别转换为这些参考图中的姿势。
+                                上传包含目标姿势的参考图（最多15张）。生成的每张底图都会随机从这些姿势图中匹配一个姿势。
                             </p>
                             <BatchImageUploader 
-                                onImagesSelected={setPoseTransferRefImages}
+                                onImagesSelected={(imgs) => {
+                                    setPoseTransferRefImages(imgs);
+                                    setPoseTransferResults([]);
+                                }}
                                 currentImages={poseTransferRefImages}
                                 maxImages={15}
+                                title="上传姿势参考图 (批量)"
+                                subtitle="支持多选上传最多15张姿势图"
                             />
                         </div>
                     </div>
@@ -3181,19 +3787,19 @@ Task:
                     <div className="flex justify-center pt-4">
                         <Button 
                             onClick={handlePoseTransferGeneration} 
-                            disabled={isProcessing || !poseTransferBaseImage || poseTransferRefImages.length === 0}
+                            disabled={isProcessing || poseTransferBaseImages.length === 0 || poseTransferRefImages.length === 0}
                             size="lg"
                             className="px-12 py-4 text-lg bg-teal-600 hover:bg-teal-700 shadow-teal-200"
                         >
                             {isProcessing ? (
                                 <>
                                     <RefreshCw className="animate-spin mr-2" size={24} />
-                                    正在迁移姿势...
+                                    正在迁移姿势 ({progressCount}/{progressTotal})...
                                 </>
                             ) : (
                                 <>
                                     <Sparkles className="mr-2" size={24} />
-                                    一键迁移 ({poseTransferRefImages.length}张)
+                                    一键迁移 ({poseTransferBaseImages.length}张底图，随机分配姿势)
                                 </>
                             )}
                         </Button>
@@ -3205,27 +3811,30 @@ Task:
                             <div className="flex items-center justify-between px-4">
                                 <h3 className="text-xl font-bold text-slate-800">生成结果列表</h3>
                                 <Button 
-                                    onClick={() => downloadAll(poseTransferResults.map(r => r.result.imageUrl).filter(Boolean) as string[], 'pose-transfer')}
+                                    onClick={downloadAllPoseTransferResults}
                                     variant="outline"
                                     size="sm"
                                     disabled={!poseTransferResults.some(r => r.result.status === 'success')}
                                     className="flex items-center gap-2"
                                 >
                                     <Download size={16} />
-                                    一键下载全部
+                                    一键下载全部 (ZIP)
                                 </Button>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
-                                {poseTransferResults.map((item, idx) => {
-                                    const refImg = poseTransferRefImages[item.sourceIndex];
+                                {poseTransferResults.map((item) => {
+                                    const baseImg = poseTransferBaseImages[item.baseIndex];
+                                    const refImg = poseTransferRefImages[item.poseIndex];
                                     const { result } = item;
                                     
                                     return (
-                                        <div key={idx} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col">
+                                        <div key={item.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col">
                                             <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                                                <span className="font-medium text-slate-600 text-sm">姿势 #{idx + 1}</span>
+                                                <span className="font-medium text-slate-600 text-sm">
+                                                    底图 #{item.baseIndex + 1} ➔ 姿势 #{item.poseIndex + 1}
+                                                </span>
                                                 <button 
-                                                    onClick={() => handleRegeneratePoseTransferItem(item.sourceIndex)}
+                                                    onClick={() => handleRegeneratePoseTransferItem(item.id)}
                                                     disabled={result.status === 'loading'}
                                                     className="text-slate-400 hover:text-teal-600 disabled:opacity-50 transition-colors flex items-center gap-1 text-xs"
                                                 >
@@ -3237,20 +3846,24 @@ Task:
                                                 {/* Source */}
                                                 <div className="relative rounded-lg overflow-hidden bg-slate-100 flex flex-col gap-1">
                                                     <div className="relative h-1/2 rounded overflow-hidden">
-                                                        <img 
-                                                            src={`data:${poseTransferBaseImage!.mimeType};base64,${poseTransferBaseImage!.base64}`} 
-                                                            className="w-full h-full object-cover opacity-80" 
-                                                            alt="Base" 
-                                                        />
-                                                        <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">底图</div>
+                                                        {baseImg && (
+                                                            <img 
+                                                                src={`data:${baseImg.mimeType};base64,${baseImg.base64}`} 
+                                                                className="w-full h-full object-cover opacity-80" 
+                                                                alt="Base" 
+                                                            />
+                                                        )}
+                                                        <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">底图 #{item.baseIndex + 1}</div>
                                                     </div>
                                                     <div className="relative h-1/2 rounded overflow-hidden">
-                                                        <img 
-                                                            src={`data:${refImg.mimeType};base64,${refImg.base64}`} 
-                                                            className="w-full h-full object-cover opacity-80" 
-                                                            alt="Reference Pose" 
-                                                        />
-                                                        <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">姿势</div>
+                                                        {refImg && (
+                                                            <img 
+                                                                src={`data:${refImg.mimeType};base64,${refImg.base64}`} 
+                                                                className="w-full h-full object-cover opacity-80" 
+                                                                alt="Reference Pose" 
+                                                            />
+                                                        )}
+                                                        <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">姿势 #{item.poseIndex + 1}</div>
                                                     </div>
                                                 </div>
 
@@ -3262,7 +3875,7 @@ Task:
                                                     {result.status === 'error' && (
                                                         <div className="text-red-400 text-xs text-center p-2">
                                                             <AlertCircle size={20} className="mx-auto mb-1" />
-                                                            生成失败
+                                                            {result.error || '生成失败'}
                                                         </div>
                                                     )}
                                                     {result.status === 'success' && result.imageUrl && (
@@ -3283,7 +3896,7 @@ Task:
                                                                 </button>
                                                                 <a 
                                                                     href={result.imageUrl}
-                                                                    download={`pose-transfer-${idx}.png`}
+                                                                    download={`pose-transfer-base${item.baseIndex + 1}-pose${item.poseIndex + 1}.png`}
                                                                     className="p-1.5 bg-white/90 rounded-md shadow-sm hover:bg-white text-slate-700"
                                                                 >
                                                                     <Download size={14} />
