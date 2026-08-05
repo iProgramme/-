@@ -522,8 +522,8 @@ export const generateTextToImage = async (
 export const generateTryOn = async (
   modelImageBase64: string,
   modelImageMimeType: string,
-  clothingImageBase64: string,
-  clothingImageMimeType: string,
+  clothingImageBase64: string | null | undefined,
+  clothingImageMimeType: string | null | undefined,
   prompt: string,
   config: {
     useCustomApi: boolean;
@@ -545,7 +545,9 @@ export const generateTryOn = async (
 
     const formData = new FormData();
     formData.append("image", base64ToBlob(modelImageBase64, modelImageMimeType), "model.png");
-    formData.append("image", base64ToBlob(clothingImageBase64, clothingImageMimeType), "clothing.png");
+    if (clothingImageBase64 && clothingImageMimeType) {
+      formData.append("image", base64ToBlob(clothingImageBase64, clothingImageMimeType), "clothing.png");
+    }
     if (stockingImageBase64 && stockingImageMimeType) {
       formData.append("image", base64ToBlob(stockingImageBase64, stockingImageMimeType), "stocking.png");
     }
@@ -592,20 +594,23 @@ export const generateTryOn = async (
   }
 
   try {
-    const parts: any[] = [
-      {
+    const parts: any[] = [];
+
+    if (clothingImageBase64 && clothingImageMimeType) {
+      parts.push({
         inlineData: {
           data: clothingImageBase64,
           mimeType: clothingImageMimeType,
         },
+      });
+    }
+
+    parts.push({
+      inlineData: {
+        data: modelImageBase64,
+        mimeType: modelImageMimeType,
       },
-      {
-        inlineData: {
-          data: modelImageBase64,
-          mimeType: modelImageMimeType,
-        },
-      }
-    ];
+    });
 
     if (stockingImageBase64 && stockingImageMimeType) {
       parts.push({

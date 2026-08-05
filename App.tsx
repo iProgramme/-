@@ -191,12 +191,15 @@ const App: React.FC = () => {
 
   // Try-on State (New Tab)
   const [tryOnModelImage, setTryOnModelImage] = useState<UploadedImage | null>(null);
+  const [tryOnClothingMode, setTryOnClothingMode] = useState<'image' | 'prompt'>('image');
   const [tryOnClothingImages, setTryOnClothingImages] = useState<UploadedImage[]>([]);
+  const [tryOnClothingPrompt, setTryOnClothingPrompt] = useState<string>('中国风、吊带、超短、某款式，旗袍（超短款式，紧身，开叉设计）');
+  const [tryOnPromptCount, setTryOnPromptCount] = useState<number>(4);
   const [tryOnStockingImages, setTryOnStockingImages] = useState<UploadedImage[]>([]);
   const [tryOnStockingSource, setTryOnStockingSource] = useState<'upload' | 'preset'>('upload');
   const [selectedPresetStockings, setSelectedPresetStockings] = useState<string[]>([]);
   const [tryOnStockingMatchStrategy, setTryOnStockingMatchStrategy] = useState<'random' | 'force'>('random');
-  const [tryOnResults, setTryOnResults] = useState<{sourceIndex: number, result: GenerationResult, stockingIndex?: number, stockingPreset?: string}[]>([]);
+  const [tryOnResults, setTryOnResults] = useState<{sourceIndex: number, clothingMode?: 'image' | 'prompt', clothingPrompt?: string, result: GenerationResult, stockingIndex?: number, stockingPreset?: string}[]>([]);
 
   // Pose Transfer State (New Tab)
   const [poseTransferBaseImage, setPoseTransferBaseImage] = useState<UploadedImage | null>(null);
@@ -1248,76 +1251,80 @@ const App: React.FC = () => {
   // --- Try-On (New Tab) Handlers ---
 
   const handleTryOnGeneration = async () => {
-    if (!tryOnModelImage || tryOnClothingImages.length === 0) return;
+    if (!tryOnModelImage) return;
 
-    const newResults = tryOnClothingImages.map((_, index) => {
-      let stockingIndex: number | undefined = undefined;
-      let stockingPreset: string | undefined = undefined;
+    if (tryOnClothingMode === 'image') {
+      if (tryOnClothingImages.length === 0) return;
 
-      if (tryOnStockingSource === 'upload') {
-        if (tryOnStockingImages.length > 0) {
-          if (tryOnStockingMatchStrategy === 'force') {
-            const idx = Math.floor(Math.random() * tryOnStockingImages.length);
-            stockingIndex = idx;
-          } else {
-            const pool = [-1, ...Array.from({ length: tryOnStockingImages.length }, (_, i) => i)];
-            const selected = pool[Math.floor(Math.random() * pool.length)];
-            if (selected !== -1) {
-              stockingIndex = selected;
+      const newResults = tryOnClothingImages.map((_, index) => {
+        let stockingIndex: number | undefined = undefined;
+        let stockingPreset: string | undefined = undefined;
+
+        if (tryOnStockingSource === 'upload') {
+          if (tryOnStockingImages.length > 0) {
+            if (tryOnStockingMatchStrategy === 'force') {
+              const idx = Math.floor(Math.random() * tryOnStockingImages.length);
+              stockingIndex = idx;
+            } else {
+              const pool = [-1, ...Array.from({ length: tryOnStockingImages.length }, (_, i) => i)];
+              const selected = pool[Math.floor(Math.random() * pool.length)];
+              if (selected !== -1) {
+                stockingIndex = selected;
+              }
+            }
+          }
+        } else {
+          if (selectedPresetStockings.length > 0) {
+            if (tryOnStockingMatchStrategy === 'force') {
+              const idx = Math.floor(Math.random() * selectedPresetStockings.length);
+              stockingPreset = selectedPresetStockings[idx];
+            } else {
+              const pool = [null, ...selectedPresetStockings];
+              const selected = pool[Math.floor(Math.random() * pool.length)];
+              if (selected !== null) {
+                stockingPreset = selected;
+              }
             }
           }
         }
-      } else {
-        if (selectedPresetStockings.length > 0) {
-          if (tryOnStockingMatchStrategy === 'force') {
-            const idx = Math.floor(Math.random() * selectedPresetStockings.length);
-            stockingPreset = selectedPresetStockings[idx];
-          } else {
-            const pool = [null, ...selectedPresetStockings];
-            const selected = pool[Math.floor(Math.random() * pool.length)];
-            if (selected !== null) {
-              stockingPreset = selected;
-            }
+
+        return {
+          sourceIndex: index,
+          clothingMode: 'image' as const,
+          stockingIndex: stockingIndex,
+          stockingPreset: stockingPreset,
+          result: {
+            id: `tryon-${Date.now()}-${index}`,
+            poseId: 'tryon',
+            status: 'loading' as const
           }
-        }
-      }
+        };
+      });
 
-      return {
-        sourceIndex: index,
-        stockingIndex: stockingIndex,
-        stockingPreset: stockingPreset,
-        result: {
-          id: `tryon-${Date.now()}-${index}`,
-          poseId: 'tryon',
-          status: 'loading' as const
-        }
-      };
-    });
+      setTryOnResults(newResults);
+      setIsProcessing(true);
+      setProgressCount(0);
+      setProgressTotal(newResults.length);
 
-    setTryOnResults(newResults);
-    setIsProcessing(true);
-    setProgressCount(0);
-    setProgressTotal(newResults.length);
+      try {
+        const chunkSize = 20;
+        for (let i = 0; i < newResults.length; i += chunkSize) {
+          const chunk = newResults.slice(i, i + chunkSize);
+          await Promise.all(chunk.map(async (item) => {
+            let retryCount = 0;
+            const maxRetries = 3;
+            let success = false;
 
-    try {
-      const chunkSize = 20;
-      for (let i = 0; i < newResults.length; i += chunkSize) {
-        const chunk = newResults.slice(i, i + chunkSize);
-        await Promise.all(chunk.map(async (item) => {
-          let retryCount = 0;
-          const maxRetries = 3;
-          let success = false;
-
-          try {
-            while (retryCount <= maxRetries && !success) {
-              try {
-                const clothingImg = tryOnClothingImages[item.sourceIndex];
-                const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
-                const activePreset = item.stockingPreset ? STOCKING_PRESETS.find(p => p.id === item.stockingPreset) : undefined;
-                
-                let prompt = TRYON_PROMPT;
-                if (stockingImg) {
-                  prompt = `You are an expert AI fashion stylist and photographer.
+            try {
+              while (retryCount <= maxRetries && !success) {
+                try {
+                  const clothingImg = tryOnClothingImages[item.sourceIndex];
+                  const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
+                  const activePreset = item.stockingPreset ? STOCKING_PRESETS.find(p => p.id === item.stockingPreset) : undefined;
+                  
+                  let prompt = TRYON_PROMPT;
+                  if (stockingImg) {
+                    prompt = `You are an expert AI fashion stylist and photographer.
 
 Input 1: An image of a clothing product (garment).
 Input 2: An image of a model standing in a scene.
@@ -1334,8 +1341,8 @@ Task:
 8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
 9. Ensure high fidelity for the clothing and stockings texture and fit.
 9:16`;
-                } else if (activePreset) {
-                  prompt = `You are an expert AI fashion stylist and photographer.
+                  } else if (activePreset) {
+                    prompt = `You are an expert AI fashion stylist and photographer.
 
 Input 1: An image of a clothing product (garment).
 Input 2: An image of a model standing in a scene.
@@ -1351,59 +1358,235 @@ Task:
 8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
 9. Ensure high fidelity for the clothing and stockings texture and fit.
 9:16`;
-                }
+                  }
 
-                const imageUrl = await generateTryOn(
-                  tryOnModelImage.base64,
-                  tryOnModelImage.mimeType,
-                  clothingImg.base64,
-                  clothingImg.mimeType,
-                  prompt,
-                  commonApiConfig,
-                  stockingImg?.base64,
-                  stockingImg?.mimeType
-                );
+                  const imageUrl = await generateTryOn(
+                    tryOnModelImage.base64,
+                    tryOnModelImage.mimeType,
+                    clothingImg.base64,
+                    clothingImg.mimeType,
+                    prompt,
+                    commonApiConfig,
+                    stockingImg?.base64,
+                    stockingImg?.mimeType
+                  );
 
-                setTryOnResults(prev => prev.map(r => 
-                  r.sourceIndex === item.sourceIndex 
-                    ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
-                    : r
-                ));
-                success = true;
-                if (useCustomApi && customApiKey) {
-                  checkKeyUsage(customApiKey, 'custom').catch(() => {});
-                }
-              } catch (error: any) {
-                const errorMsg = error.message || '';
-                const isQuotaError = errorMsg.toLowerCase().includes('quota') || errorMsg.includes('额度');
-
-                if (isQuotaError) {
                   setTryOnResults(prev => prev.map(r => 
                     r.sourceIndex === item.sourceIndex 
-                      ? { ...r, result: { ...r.result, status: 'error', error: `额度不足: ${errorMsg}` } } 
+                      ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
                       : r
                   ));
-                  break;
-                }
+                  success = true;
+                  if (useCustomApi && customApiKey) {
+                    checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                  }
+                } catch (error: any) {
+                  const errorMsg = error.message || '';
+                  const isQuotaError = errorMsg.toLowerCase().includes('quota') || errorMsg.includes('额度');
 
-                retryCount++;
-                if (retryCount > maxRetries) {
-                  setTryOnResults(prev => prev.map(r => 
-                    r.sourceIndex === item.sourceIndex 
-                      ? { ...r, result: { ...r.result, status: 'error', error: errorMsg || 'Generation failed' } } 
-                      : r
-                  ));
+                  if (isQuotaError) {
+                    setTryOnResults(prev => prev.map(r => 
+                      r.sourceIndex === item.sourceIndex 
+                        ? { ...r, result: { ...r.result, status: 'error', error: `额度不足: ${errorMsg}` } } 
+                        : r
+                    ));
+                    break;
+                  }
+
+                  retryCount++;
+                  if (retryCount > maxRetries) {
+                    setTryOnResults(prev => prev.map(r => 
+                      r.sourceIndex === item.sourceIndex 
+                        ? { ...r, result: { ...r.result, status: 'error', error: errorMsg || 'Generation failed' } } 
+                        : r
+                    ));
+                  }
+                  if (!success && retryCount <= maxRetries) await new Promise(resolve => setTimeout(resolve, 1000));
                 }
-                if (!success && retryCount <= maxRetries) await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+            } finally {
+              setProgressCount(prev => prev + 1);
+            }
+          }));
+        }
+      } finally {
+        setIsProcessing(false);
+      }
+    } else {
+      // Prompt mode
+      if (!tryOnClothingPrompt.trim()) return;
+
+      const newResults = Array.from({ length: tryOnPromptCount }).map((_, index) => {
+        let stockingIndex: number | undefined = undefined;
+        let stockingPreset: string | undefined = undefined;
+
+        if (tryOnStockingSource === 'upload') {
+          if (tryOnStockingImages.length > 0) {
+            if (tryOnStockingMatchStrategy === 'force') {
+              const idx = Math.floor(Math.random() * tryOnStockingImages.length);
+              stockingIndex = idx;
+            } else {
+              const pool = [-1, ...Array.from({ length: tryOnStockingImages.length }, (_, i) => i)];
+              const selected = pool[Math.floor(Math.random() * pool.length)];
+              if (selected !== -1) {
+                stockingIndex = selected;
               }
             }
-          } finally {
-            setProgressCount(prev => prev + 1);
           }
-        }));
+        } else {
+          if (selectedPresetStockings.length > 0) {
+            if (tryOnStockingMatchStrategy === 'force') {
+              const idx = Math.floor(Math.random() * selectedPresetStockings.length);
+              stockingPreset = selectedPresetStockings[idx];
+            } else {
+              const pool = [null, ...selectedPresetStockings];
+              const selected = pool[Math.floor(Math.random() * pool.length)];
+              if (selected !== null) {
+                stockingPreset = selected;
+              }
+            }
+          }
+        }
+
+        return {
+          sourceIndex: index,
+          clothingMode: 'prompt' as const,
+          clothingPrompt: tryOnClothingPrompt.trim(),
+          stockingIndex: stockingIndex,
+          stockingPreset: stockingPreset,
+          result: {
+            id: `tryon-prompt-${Date.now()}-${index}`,
+            poseId: 'tryon',
+            status: 'loading' as const
+          }
+        };
+      });
+
+      setTryOnResults(newResults);
+      setIsProcessing(true);
+      setProgressCount(0);
+      setProgressTotal(newResults.length);
+
+      try {
+        const chunkSize = 20;
+        for (let i = 0; i < newResults.length; i += chunkSize) {
+          const chunk = newResults.slice(i, i + chunkSize);
+          await Promise.all(chunk.map(async (item) => {
+            let retryCount = 0;
+            const maxRetries = 3;
+            let success = false;
+
+            try {
+              while (retryCount <= maxRetries && !success) {
+                try {
+                  const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
+                  const activePreset = item.stockingPreset ? STOCKING_PRESETS.find(p => p.id === item.stockingPreset) : undefined;
+                  
+                  let prompt = `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a model standing in a scene.
+Target Clothing Description: ${item.clothingPrompt} (Variation ${item.sourceIndex + 1}).
+
+Task:
+1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described above: "${item.clothingPrompt}".
+2. The described clothing must completely replace the model's original outfit.
+3. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+4. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+5. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+6. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot. Ensure the feet are flat on the ground.
+7. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+8. Ensure high fidelity for the clothing texture and fit.
+9:16`;
+
+                  if (stockingImg) {
+                    prompt = `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a model standing in a scene.
+Input 2: An image of stockings/hosiery.
+Target Clothing Description: ${item.clothingPrompt} (Variation ${item.sourceIndex + 1}).
+
+Task:
+1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described: "${item.clothingPrompt}" AND the stockings from Input 2.
+2. The described clothing must completely replace the model's original outfit.
+3. The stockings from Input 2 must be worn on the model's legs.
+4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot (or wearing the stockings without shoes). Ensure the feet are flat on the ground.
+8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+9. Ensure high fidelity for the clothing and stockings texture and fit.
+9:16`;
+                  } else if (activePreset) {
+                    prompt = `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a model standing in a scene.
+Target Clothing Description: ${item.clothingPrompt} (Variation ${item.sourceIndex + 1}).
+
+Task:
+1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described: "${item.clothingPrompt}" AND wearing specific stockings/hosiery: ${activePreset.prompt}.
+2. The described clothing must completely replace the model's original outfit.
+3. The model's legs MUST be dressed in the stockings: "${activePreset.prompt}". Render this naturally, photorealistically and smoothly.
+4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot wearing the stockings/hosiery described. Ensure the feet are flat on the ground.
+8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+9. Ensure high fidelity for the clothing and stockings texture and fit.
+9:16`;
+                  }
+
+                  const imageUrl = await generateTryOn(
+                    tryOnModelImage.base64,
+                    tryOnModelImage.mimeType,
+                    null,
+                    null,
+                    prompt,
+                    commonApiConfig,
+                    stockingImg?.base64,
+                    stockingImg?.mimeType
+                  );
+
+                  setTryOnResults(prev => prev.map(r => 
+                    r.sourceIndex === item.sourceIndex 
+                      ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
+                      : r
+                  ));
+                  success = true;
+                  if (useCustomApi && customApiKey) {
+                    checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                  }
+                } catch (error: any) {
+                  const errorMsg = error.message || '';
+                  const isQuotaError = errorMsg.toLowerCase().includes('quota') || errorMsg.includes('额度');
+
+                  if (isQuotaError) {
+                    setTryOnResults(prev => prev.map(r => 
+                      r.sourceIndex === item.sourceIndex 
+                        ? { ...r, result: { ...r.result, status: 'error', error: `额度不足: ${errorMsg}` } } 
+                        : r
+                    ));
+                    break;
+                  }
+
+                  retryCount++;
+                  if (retryCount > maxRetries) {
+                    setTryOnResults(prev => prev.map(r => 
+                      r.sourceIndex === item.sourceIndex 
+                        ? { ...r, result: { ...r.result, status: 'error', error: errorMsg || 'Generation failed' } } 
+                        : r
+                    ));
+                  }
+                  if (!success && retryCount <= maxRetries) await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+              }
+            } finally {
+              setProgressCount(prev => prev + 1);
+            }
+          }));
+        }
+      } finally {
+        setIsProcessing(false);
       }
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -1446,8 +1629,14 @@ Task:
 
   const handleRetryTryOnImage = async (index: number) => {
     if (!tryOnModelImage) return;
-    const clothingImg = tryOnClothingImages[index];
-    if (!clothingImg) return;
+    const currentResultItem = tryOnResults.find(r => r.sourceIndex === index);
+    const isPromptMode = currentResultItem?.clothingMode === 'prompt';
+
+    let clothingImg: UploadedImage | null = null;
+    if (!isPromptMode) {
+      clothingImg = tryOnClothingImages[index] || null;
+      if (!clothingImg) return;
+    }
 
     let stockingIndex: number | undefined = undefined;
     let stockingPreset: string | undefined = undefined;
@@ -1490,9 +1679,65 @@ Task:
       const stockingImg = stockingIndex !== undefined ? tryOnStockingImages[stockingIndex] : undefined;
       const activePreset = stockingPreset ? STOCKING_PRESETS.find(p => p.id === stockingPreset) : undefined;
       
-      let prompt = TRYON_PROMPT;
-      if (stockingImg) {
+      let prompt = '';
+      if (isPromptMode) {
+        const cPrompt = currentResultItem?.clothingPrompt || tryOnClothingPrompt;
         prompt = `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a model standing in a scene.
+Target Clothing Description: ${cPrompt} (Variation ${index + 1}).
+
+Task:
+1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described above: "${cPrompt}".
+2. The described clothing must completely replace the model's original outfit.
+3. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+4. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+5. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+6. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot. Ensure the feet are flat on the ground.
+7. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+8. Ensure high fidelity for the clothing texture and fit.
+9:16`;
+
+        if (stockingImg) {
+          prompt = `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a model standing in a scene.
+Input 2: An image of stockings/hosiery.
+Target Clothing Description: ${cPrompt} (Variation ${index + 1}).
+
+Task:
+1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described: "${cPrompt}" AND the stockings from Input 2.
+2. The described clothing must completely replace the model's original outfit.
+3. The stockings from Input 2 must be worn on the model's legs.
+4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot (or wearing the stockings without shoes). Ensure the feet are flat on the ground.
+8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+9. Ensure high fidelity for the clothing and stockings texture and fit.
+9:16`;
+        } else if (activePreset) {
+          prompt = `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a model standing in a scene.
+Target Clothing Description: ${cPrompt} (Variation ${index + 1}).
+
+Task:
+1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described: "${cPrompt}" AND wearing specific stockings/hosiery: ${activePreset.prompt}.
+2. The described clothing must completely replace the model's original outfit.
+3. The model's legs MUST be dressed in the stockings: "${activePreset.prompt}". Render this naturally, photorealistically and smoothly.
+4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot wearing the stockings/hosiery described. Ensure the feet are flat on the ground.
+8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+9. Ensure high fidelity for the clothing and stockings texture and fit.
+9:16`;
+        }
+      } else {
+        prompt = TRYON_PROMPT;
+        if (stockingImg) {
+          prompt = `You are an expert AI fashion stylist and photographer.
 
 Input 1: An image of a clothing product (garment).
 Input 2: An image of a model standing in a scene.
@@ -1509,8 +1754,8 @@ Task:
 8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
 9. Ensure high fidelity for the clothing and stockings texture and fit.
 9:16`;
-      } else if (activePreset) {
-        prompt = `You are an expert AI fashion stylist and photographer.
+        } else if (activePreset) {
+          prompt = `You are an expert AI fashion stylist and photographer.
 
 Input 1: An image of a clothing product (garment).
 Input 2: An image of a model standing in a scene.
@@ -1526,13 +1771,14 @@ Task:
 8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
 9. Ensure high fidelity for the clothing and stockings texture and fit.
 9:16`;
+        }
       }
 
       const imageUrl = await generateTryOn(
         tryOnModelImage.base64,
         tryOnModelImage.mimeType,
-        clothingImg.base64,
-        clothingImg.mimeType,
+        clothingImg ? clothingImg.base64 : null,
+        clothingImg ? clothingImg.mimeType : null,
         prompt,
         commonApiConfig,
         stockingImg?.base64,
@@ -2441,21 +2687,99 @@ Task:
                             </div>
 
                             {tryOnModelImage && (
-                                <div className="animate-in fade-in slide-in-from-bottom-4">
+                                <div className="animate-in fade-in slide-in-from-bottom-4 space-y-4">
                                     <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
                                         <span className="bg-slate-800 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>
-                                        上传衣服平铺图 (批量)
+                                        换装衣服选择 / 提示词输入
                                     </h3>
-                                    <BatchImageUploader 
-                                        currentImages={tryOnClothingImages}
-                                        onImagesSelected={(imgs) => {
-                                            setTryOnClothingImages(imgs);
-                                            if (imgs.length === 0) setTryOnResults([]);
-                                        }}
-                                        maxImages={50}
-                                        title="上传衣服图 (批量)"
-                                        subtitle="支持多选，建议使用平铺图"
-                                    />
+
+                                    {/* Toggle button group */}
+                                    <div className="flex bg-slate-100 p-1.5 rounded-xl max-w-md border border-slate-200">
+                                        <button
+                                            type="button"
+                                            onClick={() => setTryOnClothingMode('image')}
+                                            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${
+                                                tryOnClothingMode === 'image'
+                                                    ? 'bg-white text-orange-600 shadow-sm border border-slate-200/60'
+                                                    : 'text-slate-600 hover:text-slate-900'
+                                            }`}
+                                        >
+                                            <Shirt size={16} />
+                                            上传衣服平铺图 (批量)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setTryOnClothingMode('prompt')}
+                                            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${
+                                                tryOnClothingMode === 'prompt'
+                                                    ? 'bg-white text-orange-600 shadow-sm border border-slate-200/60'
+                                                    : 'text-slate-600 hover:text-slate-900'
+                                            }`}
+                                        >
+                                            <Wand2 size={16} />
+                                            自行输入提示词
+                                        </button>
+                                    </div>
+
+                                    {tryOnClothingMode === 'image' ? (
+                                        <BatchImageUploader 
+                                            currentImages={tryOnClothingImages}
+                                            onImagesSelected={(imgs) => {
+                                                setTryOnClothingImages(imgs);
+                                                if (imgs.length === 0) setTryOnResults([]);
+                                            }}
+                                            maxImages={50}
+                                            title="上传衣服图 (批量)"
+                                            subtitle="支持多选，建议使用平铺图"
+                                        />
+                                    ) : (
+                                        <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
+                                            <div>
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <label className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+                                                        <Sparkles size={16} className="text-orange-500" />
+                                                        服装外观提示词描述：
+                                                    </label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setTryOnClothingPrompt('中国风、吊带、超短、某款式，旗袍（超短款式，紧身，开叉设计）')}
+                                                        className="text-xs text-orange-600 hover:text-orange-700 underline font-medium"
+                                                    >
+                                                        恢复默认提示词
+                                                    </button>
+                                                </div>
+                                                <textarea
+                                                    value={tryOnClothingPrompt}
+                                                    onChange={(e) => setTryOnClothingPrompt(e.target.value)}
+                                                    rows={3}
+                                                    placeholder="请输入想要为模特换上的服装细节描述..."
+                                                    className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all text-sm text-slate-800 font-normal leading-relaxed shadow-sm"
+                                                />
+                                            </div>
+
+                                            {/* Generate Count for prompt mode */}
+                                            <div className="space-y-2 border-t border-slate-200/60 pt-3">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-semibold text-slate-600">生成图片张数：</span>
+                                                    <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                                                        {tryOnPromptCount} 张
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs text-slate-400 font-medium">1</span>
+                                                    <input 
+                                                        type="range"
+                                                        min={1}
+                                                        max={15}
+                                                        value={tryOnPromptCount}
+                                                        onChange={(e) => setTryOnPromptCount(Number(e.target.value))}
+                                                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-600"
+                                                    />
+                                                    <span className="text-xs text-slate-400 font-medium">15</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -2644,7 +2968,7 @@ Task:
                             )}
                         </div>
 
-                        {tryOnModelImage && tryOnClothingImages.length > 0 && (
+                        {tryOnModelImage && (tryOnClothingMode === 'image' ? tryOnClothingImages.length > 0 : tryOnClothingPrompt.trim().length > 0) && (
                             <div className="mt-8 flex justify-center">
                                 <Button 
                                     onClick={handleTryOnGeneration} 
@@ -2652,7 +2976,10 @@ Task:
                                     className="px-10 py-3 text-lg bg-orange-600 hover:bg-orange-700 shadow-lg hover:shadow-orange-200/50"
                                 >
                                     <Sparkles size={20} />
-                                    一键生成 {tryOnClothingImages.length} 张换装图
+                                    {tryOnClothingMode === 'image'
+                                        ? `一键生成 ${tryOnClothingImages.length} 张换装图`
+                                        : `一键生成 ${tryOnPromptCount} 张换装图 (根据提示词)`
+                                    }
                                 </Button>
                             </div>
                         )}
@@ -2685,17 +3012,19 @@ Task:
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
                                 {tryOnResults.map((item, idx) => {
-                                    const clothingImg = tryOnClothingImages[item.sourceIndex];
+                                    const clothingImg = item.clothingMode === 'prompt' ? null : tryOnClothingImages[item.sourceIndex];
                                     const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
                                     const { result } = item;
                                     
                                     return (
                                         <div key={idx} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col">
                                             <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                                                <span className="font-medium text-slate-600 text-sm">衣服 #{idx + 1}</span>
+                                                <span className="font-medium text-slate-600 text-sm">
+                                                    {item.clothingMode === 'prompt' ? `提示词换装 #${idx + 1}` : `衣服 #${idx + 1}`}
+                                                </span>
                                                 <div className="flex items-center gap-3">
                                                     <button 
-                                                        onClick={() => handleRetryTryOnImage(idx)}
+                                                        onClick={() => handleRetryTryOnImage(item.sourceIndex)}
                                                         disabled={result.status === 'loading'}
                                                         className="p-1.5 bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                                                         title="重新生成这张"
@@ -2715,13 +3044,24 @@ Task:
                                                         />
                                                         <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">模特</div>
                                                     </div>
-                                                    <div className="relative h-1/3 rounded overflow-hidden">
-                                                        <img 
-                                                            src={`data:${clothingImg.mimeType};base64,${clothingImg.base64}`} 
-                                                            className="w-full h-full object-cover opacity-80" 
-                                                            alt="Clothing" 
-                                                        />
-                                                        <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">衣服</div>
+                                                    <div className="relative h-1/3 rounded overflow-hidden bg-slate-200">
+                                                        {item.clothingMode === 'prompt' || !clothingImg ? (
+                                                            <div className="w-full h-full bg-orange-900/80 text-orange-100 p-1 flex flex-col justify-center items-center text-center overflow-hidden">
+                                                                <span className="text-[8px] text-orange-300 font-bold block">提示词服装</span>
+                                                                <span className="text-[9px] line-clamp-2 leading-tight px-1 font-normal text-white/90" title={item.clothingPrompt || tryOnClothingPrompt}>
+                                                                    {item.clothingPrompt || tryOnClothingPrompt}
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <img 
+                                                                    src={`data:${clothingImg.mimeType};base64,${clothingImg.base64}`} 
+                                                                    className="w-full h-full object-cover opacity-80" 
+                                                                    alt="Clothing" 
+                                                                />
+                                                                <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">衣服</div>
+                                                            </>
+                                                        )}
                                                     </div>
                                                     <div className="relative h-1/3 rounded overflow-hidden bg-slate-200 flex items-center justify-center p-1 text-center">
                                                         {stockingImg ? (
