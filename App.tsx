@@ -17,32 +17,32 @@ import { Layers, Wand2, Sparkles, AlertTriangle, AlertCircle, Settings, X, Check
 // 3 Sitting, 3 Kneeling, 2 Standing
 
 const SELFIE_TEMPLATES = [
-  // 3 坐姿 (Sitting)
+  // 3 坐姿 (Sitting) - 全部坐在地板上，绝无椅子或沙发
   { 
     label: "坐姿 1 (地板盘坐)", 
     prompts: [
-      "Sitting on the floor, legs crossed comfortably. Mirror selfie style, phone covering face.",
-      "Sitting on the floor, one leg extended, one leg bent. Mirror selfie style, phone covering face.",
-      "Sitting on the floor, hugging knees to chest. Mirror selfie style, phone covering face.",
-      "Sitting on the floor, leaning back on hands casually. Mirror selfie style, phone covering face."
+      "Sitting directly on the floor, legs crossed comfortably. Mirror selfie style, phone covering face.",
+      "Sitting directly on the floor, one leg extended, one leg bent. Mirror selfie style, phone covering face.",
+      "Sitting directly on the floor, hugging knees to chest. Mirror selfie style, phone covering face.",
+      "Sitting directly on the floor, leaning back on hands casually. Mirror selfie style, phone covering face."
     ]
   },
   { 
-    label: "坐姿 2 (椅子/椅靠)", 
+    label: "坐姿 2 (地板伸腿/抱膝)", 
     prompts: [
-      "Sitting on a modern chair, legs crossed gracefully. Mirror selfie style, phone covering face.",
-      "Sitting sideways on a stylish chair, casual relaxed posture. Mirror selfie style, phone covering face.",
-      "Sitting on an armchair, leaning against the armrest. Mirror selfie style, phone covering face.",
-      "Sitting on the edge of a chair, fashion pose. Mirror selfie style, phone covering face."
+      "Sitting directly on the floor, legs stretched straight forward casually. Mirror selfie style, phone covering face.",
+      "Sitting directly on the floor, leaning sideways with hands supporting on floor. Mirror selfie style, phone covering face.",
+      "Sitting directly on the floor with ankles crossed and hands on knees. Mirror selfie style, phone covering face.",
+      "Sitting directly on the floor on a clean rug, casual relaxed posture. Mirror selfie style, phone covering face."
     ]
   },
   { 
     label: "坐姿 3 (地板侧坐)", 
     prompts: [
-      "Sitting on the floor, side saddle pose with legs folded to one side. Mirror selfie style, phone covering face.",
-      "Sitting on the floor, legs in wide V-shape stretch posture. Mirror selfie style, phone covering face.",
-      "Sitting on the floor, one leg tucked in, leaning sideways. Mirror selfie style, phone covering face.",
-      "Sitting on a low sofa, legs curled up comfortably. Mirror selfie style, phone covering face."
+      "Sitting directly on the floor, side saddle pose with legs folded to one side. Mirror selfie style, phone covering face.",
+      "Sitting directly on the floor, legs in wide V-shape stretch posture. Mirror selfie style, phone covering face.",
+      "Sitting directly on the floor, one leg tucked in, leaning sideways on one hand. Mirror selfie style, phone covering face.",
+      "Sitting directly on the floor, legs curled up comfortably to the side. Mirror selfie style, phone covering face."
     ]
   },
 
