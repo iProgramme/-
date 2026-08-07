@@ -175,23 +175,47 @@ export const generatePoseTransfer = async (
     model: string;
     imageSize?: '1K' | '2K' | '4K';
     aspectRatio?: string;
+    transferPose?: boolean;
+    transferClothing?: boolean;
+    transferBackground?: boolean;
+    transferHairStyle?: boolean;
+    transferFace?: boolean;
   }
 ): Promise<string> => {
-  const { useCustomApi, customBaseUrl, customApiKey, gptApiKey, model, imageSize, aspectRatio } = config;
+  const { 
+    useCustomApi, customBaseUrl, customApiKey, gptApiKey, model, imageSize, aspectRatio,
+    transferPose: shouldTransferPose = true,
+    transferClothing = false,
+    transferBackground = false,
+    transferHairStyle = false,
+    transferFace = false
+  } = config;
   
   if (model === 'gpt-image-2') {
-    // For pose transfer, gpt-image-2 might not support multiple images in 'edits' easily via the standard OpenAI-like API
-    // but the user DEMO shows it can take multiple files? 
-    // "currentUploadedFiles.forEach(file => formData.append("image", file));"
-    // So let's try sending both.
     if (!gptApiKey) {
       throw new Error("gpt-image-2 API Key 缺失。请在设置中输入。");
     }
 
+    let gptPrompt = `Perform visual element transfer between base image [Image 1] and reference image [Image 2].`;
+    if (transferFace) gptPrompt += ` Adopt person face and identity from reference image [Image 2].`;
+    else gptPrompt += ` Keep person face and identity from base image [Image 1].`;
+
+    if (shouldTransferPose) gptPrompt += ` Adopt pose and body posture from reference image [Image 2].`;
+    else gptPrompt += ` Keep posture from base image [Image 1].`;
+
+    if (transferClothing) gptPrompt += ` Adopt clothing and outfit from reference image [Image 2].`;
+    else gptPrompt += ` Keep clothing from base image [Image 1].`;
+
+    if (transferBackground) gptPrompt += ` Adopt background and scene environment from reference image [Image 2].`;
+    else gptPrompt += ` Keep background from base image [Image 1].`;
+
+    if (transferHairStyle) gptPrompt += ` Adopt hair style and makeup from reference image [Image 2].`;
+    else gptPrompt += ` Keep hair style from base image [Image 1].`;
+
     const formData = new FormData();
     formData.append("image", base64ToBlob(baseImageBase64, baseImageMimeType), "base.png");
     formData.append("image", base64ToBlob(poseImageBase64, poseImageMimeType), "pose.png");
-    formData.append("prompt", `Perform pose transfer from pose image to base image. Maintain identity. High quality.`);
+    formData.append("prompt", gptPrompt);
     formData.append("model", "gpt-image-2");
     formData.append("n", "1");
 
@@ -235,20 +259,40 @@ export const generatePoseTransfer = async (
     }
   }
 
-  const prompt = `You are an expert AI photo editor. I am providing two images.
+  const faceInstruction = transferFace
+    ? "1. FACE & IDENTITY (换脸模式): Adopt and replicate the facial features, face, and person identity from [Image 2] (Reference Image) onto the target."
+    : "1. FACE & IDENTITY (保持底图人脸): STRICTLY maintain the character's facial features, face, eyes, and person identity from [Image 1] (Base Image).";
 
-[Image 1]: The base image. This image defines the character's identity, face, hair, clothing, and the background scene/environment.
-[Image 2]: The reference pose image. This image defines the target pose, body language, and camera angle.
+  const poseInstruction = shouldTransferPose
+    ? "2. POSE & BODY POSTURE: Adopt and replicate the exact posture, body angle, arm/leg placement, and camera shot angle from [Image 2] (Reference Image)."
+    : "2. POSE & BODY POSTURE: Maintain the original body posture and camera angle from [Image 1] (Base Image).";
 
-Task: Generate a new image of the character from [Image 1] performing the exact pose and viewed from the exact camera angle shown in [Image 2].
+  const clothingInstruction = transferClothing
+    ? "3. CLOTHING & OUTFIT: Adopt and replicate the clothing, outfit, style, garments, and accessories from [Image 2] (Reference Image)."
+    : "3. CLOTHING & OUTFIT: Maintain the original clothing, outfit, and style from [Image 1] (Base Image).";
 
-CRITICAL CONSTRAINTS:
-1. STRICTLY maintain the character's original identity, face, and clothing from [Image 1]. Do not change the person's appearance.
-2. STRICTLY maintain the original background scene and environment from [Image 1]. Do not change or hallucinate a new background.
-3. The character's pose, body language, and the camera's shooting angle MUST perfectly match [Image 2].
-4. The final image should look like a natural photo of the person from [Image 1] striking the pose from [Image 2] in their original environment.
+  const backgroundInstruction = transferBackground
+    ? "4. BACKGROUND & SCENE: Adopt and replicate the background, indoor/outdoor scene, furniture, lighting, and environment from [Image 2] (Reference Image)."
+    : "4. BACKGROUND & SCENE: STRICTLY maintain the original background scene and room environment from [Image 1] (Base Image).";
 
-High quality, photorealistic.`;
+  const hairInstruction = transferHairStyle
+    ? "5. HAIR & MAKEUP: Adopt the hairstyle, hair color, and makeup style from [Image 2] (Reference Image)."
+    : "5. HAIR & MAKEUP: Maintain the hairstyle and hair color from [Image 1] (Base Image).";
+
+  const prompt = `You are an expert AI photo compositor and editor. I am providing two images.
+
+[Image 1]: Base Image (底图).
+[Image 2]: Reference Image (参考图).
+
+Task: Generate a seamless, photorealistic new photograph combining elements according to these EXACT rules:
+
+${faceInstruction}
+${poseInstruction}
+${clothingInstruction}
+${backgroundInstruction}
+${hairInstruction}
+
+The final image must look like a high-quality photorealistic photograph with natural lighting, realistic shadows, perfect blending, and sharp details.`;
 
   try {
     const response = await ai.models.generateContent({

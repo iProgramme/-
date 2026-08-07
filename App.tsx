@@ -211,9 +211,14 @@ const App: React.FC = () => {
   const [tryOnStockingMatchStrategy, setTryOnStockingMatchStrategy] = useState<'random' | 'force'>('random');
   const [tryOnResults, setTryOnResults] = useState<{sourceIndex: number, clothingMode?: 'image' | 'prompt', clothingPrompt?: string, result: GenerationResult, stockingIndex?: number, stockingPreset?: string}[]>([]);
 
-  // Pose Transfer State (New Tab)
+  // Element / Pose Transfer State
   const [poseTransferBaseImages, setPoseTransferBaseImages] = useState<UploadedImage[]>([]);
   const [poseTransferRefImages, setPoseTransferRefImages] = useState<UploadedImage[]>([]);
+  const [poseTransferPose, setPoseTransferPose] = useState<boolean>(true);
+  const [poseTransferClothing, setPoseTransferClothing] = useState<boolean>(false);
+  const [poseTransferBackground, setPoseTransferBackground] = useState<boolean>(false);
+  const [poseTransferHairStyle, setPoseTransferHairStyle] = useState<boolean>(false);
+  const [poseTransferFace, setPoseTransferFace] = useState<boolean>(false);
   const [poseTransferResults, setPoseTransferResults] = useState<{
     id: string;
     baseIndex: number;
@@ -407,42 +412,41 @@ const App: React.FC = () => {
   ) => {
     const zip = new JSZip();
     
-    // Group results if groupName is provided
-    const groups: Record<string, typeof results> = {};
-    results.forEach(r => {
-      if (r.status === 'success' && r.imageUrl) {
-        const group = r.groupName || 'images';
-        if (!groups[group]) groups[group] = [];
-        groups[group].push(r);
-      }
-    });
+    // Check how many unique groups exist
+    const uniqueGroups = new Set(results.filter(r => r.status === 'success' && r.imageUrl).map(r => r.groupName).filter(Boolean));
+    const isMultiGroup = uniqueGroups.size > 1;
 
     const fetchImage = async (url: string) => {
       const response = await fetch(url);
       return await response.blob();
     };
 
-    // Add original images to groups if available
     const processedGroups = new Set<string>();
     
     for (const r of results) {
-       if (r.status === 'success' && r.imageUrl && r.groupName) {
-         if (!processedGroups.has(r.groupName)) {
-           processedGroups.add(r.groupName);
-           // Find the first result in this group to get original image
-           const original = results.find(item => item.groupName === r.groupName)?.originalImage;
-           if (original) {
-             const blob = await fetch(`data:${original.mimeType};base64,${original.base64}`).then(res => res.blob());
-             zip.file(`${r.groupName}/original.png`, blob);
+       if (r.status === 'success' && r.imageUrl) {
+         if (isMultiGroup && r.groupName) {
+           // Multiple source images in batch: keep separate folders per group
+           if (!processedGroups.has(r.groupName)) {
+             processedGroups.add(r.groupName);
+             const original = results.find(item => item.groupName === r.groupName)?.originalImage;
+             if (original) {
+               const blob = await fetch(`data:${original.mimeType};base64,${original.base64}`).then(res => res.blob());
+               zip.file(`${r.groupName}/00_原图.png`, blob);
+             }
            }
+           const blob = await fetchImage(r.imageUrl);
+           zip.file(`${r.groupName}/${r.name}.png`, blob);
+         } else {
+           // Single source image: flat structure directly in ZIP root
+           if (r.originalImage && !processedGroups.has('original')) {
+             processedGroups.add('original');
+             const blob = await fetch(`data:${r.originalImage.mimeType};base64,${r.originalImage.base64}`).then(res => res.blob());
+             zip.file(`00_原图.png`, blob);
+           }
+           const blob = await fetchImage(r.imageUrl);
+           zip.file(`${r.name}.png`, blob);
          }
-         
-         const blob = await fetchImage(r.imageUrl);
-         zip.file(`${r.groupName}/${r.name}.png`, blob);
-       } else if (r.status === 'success' && r.imageUrl) {
-         // Flat list if no grouping
-         const blob = await fetchImage(r.imageUrl);
-         zip.file(`${r.name}.png`, blob);
        }
     }
 
@@ -1183,7 +1187,15 @@ const App: React.FC = () => {
                   baseImg.mimeType,
                   refImg.base64,
                   refImg.mimeType,
-                  { ...commonApiConfig, aspectRatio }
+                  { 
+                    ...commonApiConfig, 
+                    aspectRatio,
+                    transferPose: poseTransferPose,
+                    transferClothing: poseTransferClothing,
+                    transferBackground: poseTransferBackground,
+                    transferHairStyle: poseTransferHairStyle,
+                    transferFace: poseTransferFace
+                  }
                 );
 
                 setPoseTransferResults(prev => prev.map(r => 
@@ -1254,7 +1266,15 @@ const App: React.FC = () => {
         baseImg.mimeType,
         refImg.base64,
         refImg.mimeType,
-        { ...commonApiConfig, aspectRatio }
+        { 
+          ...commonApiConfig, 
+          aspectRatio,
+          transferPose: poseTransferPose,
+          transferClothing: poseTransferClothing,
+          transferBackground: poseTransferBackground,
+          transferHairStyle: poseTransferHairStyle,
+          transferFace: poseTransferFace
+        }
       );
 
       setPoseTransferResults(prev => prev.map(r => 
@@ -2549,12 +2569,13 @@ Task:
                     onClick={() => setActiveTab('pose_transfer')}
                     className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-sm transition-all whitespace-nowrap ${
                     activeTab === 'pose_transfer' 
-                        ? 'bg-teal-50 text-teal-700 shadow-sm' 
+                        ? 'bg-teal-50 text-teal-700 shadow-sm font-bold' 
                         : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                     }`}
                 >
                     <RefreshCw size={18} />
-                    姿势迁移
+                    迁移
+                    <span className="text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full font-bold">全能</span>
                 </button>
                 <button
                     onClick={() => setActiveTab('magic')}
@@ -3733,7 +3754,7 @@ Task:
                     )}
                 </div>
             )}
-            {/* Pose Transfer Content */}
+            {/* Pose/Element Transfer Content */}
             {activeTab === 'pose_transfer' && (
                 <div className="space-y-8 animate-in fade-in duration-500">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -3746,7 +3767,7 @@ Task:
                                 上传底图 (批量，最多50张)
                             </h2>
                             <p className="text-sm text-slate-500 mb-6">
-                                上传多张底图，AI 将保持各底图人物的身份和背景风格，并为每张底图随机匹配一个上传的姿势进行迁移。
+                                上传多张底图。默认以此底图的人脸与特征为基础，融合参考图选定的姿势、服装或场景。
                             </p>
                             <BatchImageUploader 
                                 onImagesSelected={(imgs) => {
@@ -3766,10 +3787,10 @@ Task:
                                 <span className="bg-teal-100 text-teal-700 p-1.5 rounded-lg">
                                     <Layers size={20} />
                                 </span>
-                                上传姿势参考图 (最多15张)
+                                上传参考图 (姿势/服装/场景/人脸，最多15张)
                             </h2>
                             <p className="text-sm text-slate-500 mb-6">
-                                上传包含目标姿势的参考图（最多15张）。生成的每张底图都会随机从这些姿势图中匹配一个姿势。
+                                上传包含要迁移元素的参考图（最多15张）。AI 将根据下方勾选的控件，将参考图中的要素迁移融入底图。
                             </p>
                             <BatchImageUploader 
                                 onImagesSelected={(imgs) => {
@@ -3778,9 +3799,213 @@ Task:
                                 }}
                                 currentImages={poseTransferRefImages}
                                 maxImages={15}
-                                title="上传姿势参考图 (批量)"
-                                subtitle="支持多选上传最多15张姿势图"
+                                title="上传元素参考图 (批量)"
+                                subtitle="支持多选上传最多15张参考图"
                             />
+                        </div>
+                    </div>
+
+                    {/* Advanced Element Transfer Options */}
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5 max-w-4xl mx-auto">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                    <Sparkles size={18} className="text-teal-600" />
+                                    选择迁移与融合元素：
+                                </h3>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    自由选择哪些要素从【参考图】继承迁移到底图，未勾选的要素将保留【底图】的原貌。
+                                </p>
+                            </div>
+
+                            {/* Preset Buttons */}
+                            <div className="flex flex-wrap gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setPoseTransferPose(true);
+                                        setPoseTransferClothing(false);
+                                        setPoseTransferBackground(false);
+                                        setPoseTransferHairStyle(false);
+                                        setPoseTransferFace(false);
+                                    }}
+                                    className="px-2.5 py-1 text-xs rounded-lg font-medium bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors border border-teal-200"
+                                >
+                                    仅迁移姿势
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setPoseTransferPose(true);
+                                        setPoseTransferClothing(false);
+                                        setPoseTransferBackground(false);
+                                        setPoseTransferHairStyle(false);
+                                        setPoseTransferFace(true);
+                                    }}
+                                    className="px-2.5 py-1 text-xs rounded-lg font-medium bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors border border-purple-200"
+                                >
+                                    姿势+换脸
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setPoseTransferPose(false);
+                                        setPoseTransferClothing(true);
+                                        setPoseTransferBackground(false);
+                                        setPoseTransferHairStyle(false);
+                                        setPoseTransferFace(false);
+                                    }}
+                                    className="px-2.5 py-1 text-xs rounded-lg font-medium bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors border border-orange-200"
+                                >
+                                    仅迁移服装
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setPoseTransferPose(false);
+                                        setPoseTransferClothing(false);
+                                        setPoseTransferBackground(true);
+                                        setPoseTransferHairStyle(false);
+                                        setPoseTransferFace(false);
+                                    }}
+                                    className="px-2.5 py-1 text-xs rounded-lg font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200"
+                                >
+                                    仅迁移场景
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setPoseTransferPose(true);
+                                        setPoseTransferClothing(true);
+                                        setPoseTransferBackground(true);
+                                        setPoseTransferHairStyle(true);
+                                        setPoseTransferFace(true);
+                                    }}
+                                    className="px-2.5 py-1 text-xs rounded-lg font-medium bg-pink-50 text-pink-700 hover:bg-pink-100 transition-colors border border-pink-200"
+                                >
+                                    全要素全选
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Checkboxes Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                            {/* 1. Pose */}
+                            <label className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all select-none ${
+                                poseTransferPose ? 'bg-teal-50/60 border-teal-300 ring-1 ring-teal-300' : 'bg-slate-50 border-slate-200 hover:bg-slate-100/80'
+                            }`}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={poseTransferPose}
+                                    onChange={(e) => setPoseTransferPose(e.target.checked)}
+                                    className="mt-1 rounded text-teal-600 focus:ring-teal-500 w-4 h-4"
+                                />
+                                <div className="space-y-0.5">
+                                    <span className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                        姿势 & 肢体动作
+                                        {poseTransferPose && <span className="text-[10px] bg-teal-100 text-teal-700 font-semibold px-1.5 py-0.2 rounded">迁移</span>}
+                                    </span>
+                                    <span className="text-xs text-slate-500 block leading-relaxed">
+                                        应用【参考图】的人物姿势、肢体摆放与镜头角度。
+                                    </span>
+                                </div>
+                            </label>
+
+                            {/* 2. Face */}
+                            <label className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all select-none ${
+                                poseTransferFace ? 'bg-purple-50/60 border-purple-300 ring-1 ring-purple-300' : 'bg-slate-50 border-slate-200 hover:bg-slate-100/80'
+                            }`}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={poseTransferFace}
+                                    onChange={(e) => setPoseTransferFace(e.target.checked)}
+                                    className="mt-1 rounded text-purple-600 focus:ring-purple-500 w-4 h-4"
+                                />
+                                <div className="space-y-0.5">
+                                    <span className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                        换脸 / 人脸替换
+                                        {poseTransferFace && <span className="text-[10px] bg-purple-100 text-purple-700 font-semibold px-1.5 py-0.2 rounded">换脸</span>}
+                                    </span>
+                                    <span className="text-xs text-slate-500 block leading-relaxed">
+                                        勾选后采用【参考图】人脸五官；默认不勾选（保持【底图】人物五官人脸不变）。
+                                    </span>
+                                </div>
+                            </label>
+
+                            {/* 3. Clothing */}
+                            <label className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all select-none ${
+                                poseTransferClothing ? 'bg-orange-50/60 border-orange-300 ring-1 ring-orange-300' : 'bg-slate-50 border-slate-200 hover:bg-slate-100/80'
+                            }`}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={poseTransferClothing}
+                                    onChange={(e) => setPoseTransferClothing(e.target.checked)}
+                                    className="mt-1 rounded text-orange-600 focus:ring-orange-500 w-4 h-4"
+                                />
+                                <div className="space-y-0.5">
+                                    <span className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                        服装 & 穿搭
+                                        {poseTransferClothing && <span className="text-[10px] bg-orange-100 text-orange-700 font-semibold px-1.5 py-0.2 rounded">迁移</span>}
+                                    </span>
+                                    <span className="text-xs text-slate-500 block leading-relaxed">
+                                        勾选后换上【参考图】的衣服配饰；不勾选保留【底图】原有服装。
+                                    </span>
+                                </div>
+                            </label>
+
+                            {/* 4. Background */}
+                            <label className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all select-none ${
+                                poseTransferBackground ? 'bg-blue-50/60 border-blue-300 ring-1 ring-blue-300' : 'bg-slate-50 border-slate-200 hover:bg-slate-100/80'
+                            }`}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={poseTransferBackground}
+                                    onChange={(e) => setPoseTransferBackground(e.target.checked)}
+                                    className="mt-1 rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                                />
+                                <div className="space-y-0.5">
+                                    <span className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                        场景 & 背景
+                                        {poseTransferBackground && <span className="text-[10px] bg-blue-100 text-blue-700 font-semibold px-1.5 py-0.2 rounded">迁移</span>}
+                                    </span>
+                                    <span className="text-xs text-slate-500 block leading-relaxed">
+                                        勾选后采用【参考图】背景环境；不勾选保留【底图】环境。
+                                    </span>
+                                </div>
+                            </label>
+
+                            {/* 5. Hairstyle */}
+                            <label className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all select-none ${
+                                poseTransferHairStyle ? 'bg-pink-50/60 border-pink-300 ring-1 ring-pink-300' : 'bg-slate-50 border-slate-200 hover:bg-slate-100/80'
+                            }`}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={poseTransferHairStyle}
+                                    onChange={(e) => setPoseTransferHairStyle(e.target.checked)}
+                                    className="mt-1 rounded text-pink-600 focus:ring-pink-500 w-4 h-4"
+                                />
+                                <div className="space-y-0.5">
+                                    <span className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                        发型 & 妆容
+                                        {poseTransferHairStyle && <span className="text-[10px] bg-pink-100 text-pink-700 font-semibold px-1.5 py-0.2 rounded">迁移</span>}
+                                    </span>
+                                    <span className="text-xs text-slate-500 block leading-relaxed">
+                                        勾选后迁移【参考图】的发型发色妆容；不勾选保持【底图】发型。
+                                    </span>
+                                </div>
+                            </label>
+                        </div>
+
+                        {/* Real-time Summary Card */}
+                        <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 text-xs text-slate-700 flex items-center gap-2">
+                            <span className="font-bold text-teal-700 shrink-0">💡 混合生成方案：</span>
+                            <span>
+                                人脸继承自<span className="font-bold text-slate-900">{poseTransferFace ? '【参考图】(换脸)' : '【底图】'}</span>，
+                                姿势源自<span className="font-bold text-slate-900">{poseTransferPose ? '【参考图】' : '【底图】'}</span>，
+                                服装源自<span className="font-bold text-slate-900">{poseTransferClothing ? '【参考图】' : '【底图】'}</span>，
+                                场景背景源自<span className="font-bold text-slate-900">{poseTransferBackground ? '【参考图】' : '【底图】'}</span>，
+                                发型妆容源自<span className="font-bold text-slate-900">{poseTransferHairStyle ? '【参考图】' : '【底图】'}</span>。
+                            </span>
                         </div>
                     </div>
 
@@ -3794,12 +4019,12 @@ Task:
                             {isProcessing ? (
                                 <>
                                     <RefreshCw className="animate-spin mr-2" size={24} />
-                                    正在迁移姿势 ({progressCount}/{progressTotal})...
+                                    正在生成迁移结果 ({progressCount}/{progressTotal})...
                                 </>
                             ) : (
                                 <>
                                     <Sparkles className="mr-2" size={24} />
-                                    一键迁移 ({poseTransferBaseImages.length}张底图，随机分配姿势)
+                                    一键生成迁移结果 ({poseTransferBaseImages.length}张底图，随机匹配参考图)
                                 </>
                             )}
                         </Button>
