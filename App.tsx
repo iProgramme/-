@@ -99,7 +99,69 @@ const DEFAULT_CUSTOM_SELFIE_POSES = [
   "扶手椅坐姿 (透视延伸)"
 ];
 
-const TRYON_PROMPT = `You are an expert AI fashion stylist and photographer.
+const buildTryOnPrompt = (options: {
+  mode: 'image' | 'prompt';
+  clothingPrompt?: string;
+  hasStockingImage?: boolean;
+  stockingPreset?: { id: string; label: string; prompt: string };
+  removeShoes?: boolean;
+  variationIndex?: number;
+}): string => {
+  const { mode, clothingPrompt, hasStockingImage, stockingPreset, removeShoes = true, variationIndex = 1 } = options;
+
+  let footwearInstruction = '';
+  if (removeShoes) {
+    if (hasStockingImage || stockingPreset) {
+      footwearInstruction = '7. FOOTWEAR MODIFICATION (去除鞋子/赤足): The model must NOT wear high heels or shoes. Please remove any shoes/heels and render the model barefoot (or wearing the stockings without shoes). Ensure the feet are flat on the ground.';
+    } else {
+      footwearInstruction = '6. FOOTWEAR MODIFICATION (去除鞋子/赤足): The model must NOT wear high heels or shoes. Please remove any shoes/heels and render the model barefoot. Ensure the feet are flat on the ground.';
+    }
+  } else {
+    if (mode === 'image') {
+      footwearInstruction = '6. FOOTWEAR & SHOES (保留鞋袜): If the uploaded clothing/outfit image (Input 1) contains shoes, footwear, heels, sneakers, boots, or socks, adopt and wear the matching shoes/socks from the clothing image onto the model. Otherwise, render matching stylish shoes and socks that complement the outfit naturally.';
+    } else {
+      footwearInstruction = '6. FOOTWEAR & SHOES (搭配鞋袜): Render complete matching footwear/shoes and socks that complement the outfit seamlessly.';
+    }
+  }
+
+  if (mode === 'image') {
+    if (hasStockingImage) {
+      return `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a clothing product (garment).
+Input 2: An image of a model standing in a scene.
+Input 3: An image of stockings/hosiery.
+
+Task:
+1. Generate a photorealistic image of the model from Input 2 wearing the clothing from Input 1 AND the stockings from Input 3.
+2. The clothing from Input 1 must completely replace the model's original outfit.
+3. The stockings from Input 3 must be worn on the model's legs.
+4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+${footwearInstruction}
+8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+9. Ensure high fidelity for the clothing and stockings texture and fit.
+9:16`;
+    } else if (stockingPreset) {
+      return `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a clothing product (garment).
+Input 2: An image of a model standing in a scene.
+
+Task:
+1. Generate a photorealistic image of the model from Input 2 wearing the clothing from Input 1 AND wearing specific stockings/hosiery: ${stockingPreset.prompt}.
+2. The clothing from Input 1 must completely replace the model's original outfit.
+3. The model's legs MUST be dressed in the stockings: "${stockingPreset.prompt}". Render this naturally, photorealistically and smoothly.
+4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+${footwearInstruction}
+8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+9. Ensure high fidelity for the clothing and stockings texture and fit.
+9:16`;
+    } else {
+      return `You are an expert AI fashion stylist and photographer.
 
 Input 1: An image of a clothing product (garment).
 Input 2: An image of a model standing in a scene.
@@ -110,10 +172,69 @@ Task:
 3. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
 4. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
 5. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
-6. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot. Ensure the feet are flat on the ground.
+${footwearInstruction}
 7. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
 8. Ensure high fidelity for the clothing texture and fit.
 9:16`;
+    }
+  } else {
+    const cPrompt = clothingPrompt || 'stylish outfit';
+    if (hasStockingImage) {
+      return `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a model standing in a scene.
+Input 2: An image of stockings/hosiery.
+Target Clothing Description: ${cPrompt} (Variation ${variationIndex}).
+
+Task:
+1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described: "${cPrompt}" AND the stockings from Input 2.
+2. The described clothing must completely replace the model's original outfit.
+3. The stockings from Input 2 must be worn on the model's legs.
+4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+${footwearInstruction}
+8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+9. Ensure high fidelity for the clothing and stockings texture and fit.
+9:16`;
+    } else if (stockingPreset) {
+      return `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a model standing in a scene.
+Target Clothing Description: ${cPrompt} (Variation ${variationIndex}).
+
+Task:
+1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described: "${cPrompt}" AND wearing specific stockings/hosiery: ${stockingPreset.prompt}.
+2. The described clothing must completely replace the model's original outfit.
+3. The model's legs MUST be dressed in the stockings: "${stockingPreset.prompt}". Render this naturally, photorealistically and smoothly.
+4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+${footwearInstruction}
+8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+9. Ensure high fidelity for the clothing and stockings texture and fit.
+9:16`;
+    } else {
+      return `You are an expert AI fashion stylist and photographer.
+
+Input 1: An image of a model standing in a scene.
+Target Clothing Description: ${cPrompt} (Variation ${variationIndex}).
+
+Task:
+1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described above: "${cPrompt}".
+2. The described clothing must completely replace the model's original outfit.
+3. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
+4. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
+5. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
+${footwearInstruction}
+7. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
+8. Ensure high fidelity for the clothing texture and fit.
+9:16`;
+    }
+  }
+};
+
+const TRYON_PROMPT = buildTryOnPrompt({ mode: 'image', removeShoes: true });
 
 const getClosestAspectRatio = (width: number, height: number): string => {
   const ratio = width / height;
@@ -205,11 +326,12 @@ const App: React.FC = () => {
   const [tryOnClothingImages, setTryOnClothingImages] = useState<UploadedImage[]>([]);
   const [tryOnClothingPrompt, setTryOnClothingPrompt] = useState<string>('中国风、吊带、超短、某款式，旗袍（超短款式，紧身，开叉设计）');
   const [tryOnPromptCount, setTryOnPromptCount] = useState<number>(4);
+  const [tryOnRemoveShoes, setTryOnRemoveShoes] = useState<boolean>(true);
   const [tryOnStockingImages, setTryOnStockingImages] = useState<UploadedImage[]>([]);
   const [tryOnStockingSource, setTryOnStockingSource] = useState<'upload' | 'preset'>('upload');
   const [selectedPresetStockings, setSelectedPresetStockings] = useState<string[]>([]);
   const [tryOnStockingMatchStrategy, setTryOnStockingMatchStrategy] = useState<'random' | 'force'>('random');
-  const [tryOnResults, setTryOnResults] = useState<{sourceIndex: number, clothingMode?: 'image' | 'prompt', clothingPrompt?: string, result: GenerationResult, stockingIndex?: number, stockingPreset?: string}[]>([]);
+  const [tryOnResults, setTryOnResults] = useState<{sourceIndex: number, clothingMode?: 'image' | 'prompt', clothingPrompt?: string, removeShoes?: boolean, result: GenerationResult, stockingIndex?: number, stockingPreset?: string}[]>([]);
 
   // Element / Pose Transfer State
   const [poseTransferBaseImages, setPoseTransferBaseImages] = useState<UploadedImage[]>([]);
@@ -1498,6 +1620,7 @@ const App: React.FC = () => {
         return {
           sourceIndex: index,
           clothingMode: 'image' as const,
+          removeShoes: tryOnRemoveShoes,
           stockingIndex: stockingIndex,
           stockingPreset: stockingPreset,
           result: {
@@ -1529,43 +1652,12 @@ const App: React.FC = () => {
                   const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
                   const activePreset = item.stockingPreset ? STOCKING_PRESETS.find(p => p.id === item.stockingPreset) : undefined;
                   
-                  let prompt = TRYON_PROMPT;
-                  if (stockingImg) {
-                    prompt = `You are an expert AI fashion stylist and photographer.
-
-Input 1: An image of a clothing product (garment).
-Input 2: An image of a model standing in a scene.
-Input 3: An image of stockings/hosiery.
-
-Task:
-1. Generate a photorealistic image of the model from Input 2 wearing the clothing from Input 1 AND the stockings from Input 3.
-2. The clothing from Input 1 must completely replace the model's original outfit.
-3. The stockings from Input 3 must be worn on the model's legs.
-4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
-5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
-6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
-7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot (or wearing the stockings without shoes). Ensure the feet are flat on the ground.
-8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
-9. Ensure high fidelity for the clothing and stockings texture and fit.
-9:16`;
-                  } else if (activePreset) {
-                    prompt = `You are an expert AI fashion stylist and photographer.
-
-Input 1: An image of a clothing product (garment).
-Input 2: An image of a model standing in a scene.
-
-Task:
-1. Generate a photorealistic image of the model from Input 2 wearing the clothing from Input 1 AND wearing specific stockings/hosiery: ${activePreset.prompt}.
-2. The clothing from Input 1 must completely replace the model's original outfit.
-3. The model's legs MUST be dressed in the stockings: "${activePreset.prompt}". Render this naturally, photorealistically and smoothly.
-4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
-5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
-6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
-7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot wearing the stockings/hosiery described. Ensure the feet are flat on the ground.
-8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
-9. Ensure high fidelity for the clothing and stockings texture and fit.
-9:16`;
-                  }
+                  const prompt = buildTryOnPrompt({
+                    mode: 'image',
+                    hasStockingImage: !!stockingImg,
+                    stockingPreset: activePreset,
+                    removeShoes: item.removeShoes !== undefined ? item.removeShoes : tryOnRemoveShoes
+                  });
 
                   const imageUrl = await generateTryOn(
                     tryOnModelImage.base64,
@@ -1659,6 +1751,7 @@ Task:
           sourceIndex: index,
           clothingMode: 'prompt' as const,
           clothingPrompt: tryOnClothingPrompt.trim(),
+          removeShoes: tryOnRemoveShoes,
           stockingIndex: stockingIndex,
           stockingPreset: stockingPreset,
           result: {
@@ -1689,58 +1782,14 @@ Task:
                   const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
                   const activePreset = item.stockingPreset ? STOCKING_PRESETS.find(p => p.id === item.stockingPreset) : undefined;
                   
-                  let prompt = `You are an expert AI fashion stylist and photographer.
-
-Input 1: An image of a model standing in a scene.
-Target Clothing Description: ${item.clothingPrompt} (Variation ${item.sourceIndex + 1}).
-
-Task:
-1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described above: "${item.clothingPrompt}".
-2. The described clothing must completely replace the model's original outfit.
-3. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
-4. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
-5. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
-6. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot. Ensure the feet are flat on the ground.
-7. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
-8. Ensure high fidelity for the clothing texture and fit.
-9:16`;
-
-                  if (stockingImg) {
-                    prompt = `You are an expert AI fashion stylist and photographer.
-
-Input 1: An image of a model standing in a scene.
-Input 2: An image of stockings/hosiery.
-Target Clothing Description: ${item.clothingPrompt} (Variation ${item.sourceIndex + 1}).
-
-Task:
-1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described: "${item.clothingPrompt}" AND the stockings from Input 2.
-2. The described clothing must completely replace the model's original outfit.
-3. The stockings from Input 2 must be worn on the model's legs.
-4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
-5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
-6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
-7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot (or wearing the stockings without shoes). Ensure the feet are flat on the ground.
-8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
-9. Ensure high fidelity for the clothing and stockings texture and fit.
-9:16`;
-                  } else if (activePreset) {
-                    prompt = `You are an expert AI fashion stylist and photographer.
-
-Input 1: An image of a model standing in a scene.
-Target Clothing Description: ${item.clothingPrompt} (Variation ${item.sourceIndex + 1}).
-
-Task:
-1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described: "${item.clothingPrompt}" AND wearing specific stockings/hosiery: ${activePreset.prompt}.
-2. The described clothing must completely replace the model's original outfit.
-3. The model's legs MUST be dressed in the stockings: "${activePreset.prompt}". Render this naturally, photorealistically and smoothly.
-4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
-5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
-6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
-7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot wearing the stockings/hosiery described. Ensure the feet are flat on the ground.
-8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
-9. Ensure high fidelity for the clothing and stockings texture and fit.
-9:16`;
-                  }
+                  const prompt = buildTryOnPrompt({
+                    mode: 'prompt',
+                    clothingPrompt: item.clothingPrompt,
+                    hasStockingImage: !!stockingImg,
+                    stockingPreset: activePreset,
+                    removeShoes: item.removeShoes !== undefined ? item.removeShoes : tryOnRemoveShoes,
+                    variationIndex: item.sourceIndex + 1
+                  });
 
                   const imageUrl = await generateTryOn(
                     tryOnModelImage.base64,
@@ -1885,101 +1934,23 @@ Task:
     try {
       const stockingImg = stockingIndex !== undefined ? tryOnStockingImages[stockingIndex] : undefined;
       const activePreset = stockingPreset ? STOCKING_PRESETS.find(p => p.id === stockingPreset) : undefined;
+      const removeShoes = currentResultItem?.removeShoes !== undefined ? currentResultItem.removeShoes : tryOnRemoveShoes;
       
-      let prompt = '';
-      if (isPromptMode) {
-        const cPrompt = currentResultItem?.clothingPrompt || tryOnClothingPrompt;
-        prompt = `You are an expert AI fashion stylist and photographer.
-
-Input 1: An image of a model standing in a scene.
-Target Clothing Description: ${cPrompt} (Variation ${index + 1}).
-
-Task:
-1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described above: "${cPrompt}".
-2. The described clothing must completely replace the model's original outfit.
-3. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
-4. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
-5. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
-6. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot. Ensure the feet are flat on the ground.
-7. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
-8. Ensure high fidelity for the clothing texture and fit.
-9:16`;
-
-        if (stockingImg) {
-          prompt = `You are an expert AI fashion stylist and photographer.
-
-Input 1: An image of a model standing in a scene.
-Input 2: An image of stockings/hosiery.
-Target Clothing Description: ${cPrompt} (Variation ${index + 1}).
-
-Task:
-1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described: "${cPrompt}" AND the stockings from Input 2.
-2. The described clothing must completely replace the model's original outfit.
-3. The stockings from Input 2 must be worn on the model's legs.
-4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
-5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
-6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
-7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot (or wearing the stockings without shoes). Ensure the feet are flat on the ground.
-8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
-9. Ensure high fidelity for the clothing and stockings texture and fit.
-9:16`;
-        } else if (activePreset) {
-          prompt = `You are an expert AI fashion stylist and photographer.
-
-Input 1: An image of a model standing in a scene.
-Target Clothing Description: ${cPrompt} (Variation ${index + 1}).
-
-Task:
-1. Generate a photorealistic image of the model from Input 1 wearing the custom outfit described: "${cPrompt}" AND wearing specific stockings/hosiery: ${activePreset.prompt}.
-2. The described clothing must completely replace the model's original outfit.
-3. The model's legs MUST be dressed in the stockings: "${activePreset.prompt}". Render this naturally, photorealistically and smoothly.
-4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
-5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
-6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
-7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot wearing the stockings/hosiery described. Ensure the feet are flat on the ground.
-8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
-9. Ensure high fidelity for the clothing and stockings texture and fit.
-9:16`;
-        }
-      } else {
-        prompt = TRYON_PROMPT;
-        if (stockingImg) {
-          prompt = `You are an expert AI fashion stylist and photographer.
-
-Input 1: An image of a clothing product (garment).
-Input 2: An image of a model standing in a scene.
-Input 3: An image of stockings/hosiery.
-
-Task:
-1. Generate a photorealistic image of the model from Input 2 wearing the clothing from Input 1 AND the stockings from Input 3.
-2. The clothing from Input 1 must completely replace the model's original outfit.
-3. The stockings from Input 3 must be worn on the model's legs.
-4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
-5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
-6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
-7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot (or wearing the stockings without shoes). Ensure the feet are flat on the ground.
-8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
-9. Ensure high fidelity for the clothing and stockings texture and fit.
-9:16`;
-        } else if (activePreset) {
-          prompt = `You are an expert AI fashion stylist and photographer.
-
-Input 1: An image of a clothing product (garment).
-Input 2: An image of a model standing in a scene.
-
-Task:
-1. Generate a photorealistic image of the model from Input 2 wearing the clothing from Input 1 AND wearing specific stockings/hosiery: ${activePreset.prompt}.
-2. The clothing from Input 1 must completely replace the model's original outfit.
-3. The model's legs MUST be dressed in the stockings: "${activePreset.prompt}". Render this naturally, photorealistically and smoothly.
-4. CRITICAL: Change the model's pose to be different from the original image. Make it a natural, stylish standing pose.
-5. CRITICAL REQUIREMENT: The model MUST be holding a smartphone in their hand, raised up to cover their face, simulating a "mirror selfie". The face must be obscured by the phone or the phone-holding hand.
-6. HAIR MODIFICATION: Change the model's hairstyle to simple, straight long hair (or natural loose long hair).
-7. FOOTWEAR MODIFICATION: The model must NOT wear high heels. Please remove any high heels and render the model barefoot wearing the stockings/hosiery described. Ensure the feet are flat on the ground.
-8. Maintain the general vibe and background aesthetic of the original scene if possible, or place them in a clean, compatible fashion setting.
-9. Ensure high fidelity for the clothing and stockings texture and fit.
-9:16`;
-        }
-      }
+      const prompt = isPromptMode
+        ? buildTryOnPrompt({
+            mode: 'prompt',
+            clothingPrompt: currentResultItem?.clothingPrompt || tryOnClothingPrompt,
+            hasStockingImage: !!stockingImg,
+            stockingPreset: activePreset,
+            removeShoes,
+            variationIndex: index + 1
+          })
+        : buildTryOnPrompt({
+            mode: 'image',
+            hasStockingImage: !!stockingImg,
+            stockingPreset: activePreset,
+            removeShoes
+          });
 
       const imageUrl = await generateTryOn(
         tryOnModelImage.base64,
@@ -3579,6 +3550,48 @@ Task:
                                                 </div>
                                             </button>
                                         </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Step 4: Footwear & Shoes Option */}
+                            {tryOnModelImage && (
+                                <div className="animate-in fade-in slide-in-from-bottom-4 bg-slate-50/50 p-6 rounded-2xl border border-slate-200/80 space-y-4 text-left">
+                                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                        <span className="bg-slate-800 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">4</span>
+                                        鞋袜搭配选项
+                                    </h3>
+
+                                    <div className="space-y-3">
+                                        <label className={`flex items-start gap-3.5 p-4 rounded-xl border cursor-pointer transition-all ${
+                                            tryOnRemoveShoes 
+                                                ? 'bg-orange-50/20 border-orange-300 ring-1 ring-orange-200/60' 
+                                                : 'bg-white border-slate-200 hover:border-slate-300'
+                                        }`}>
+                                            <input 
+                                                type="checkbox"
+                                                checked={tryOnRemoveShoes}
+                                                onChange={(e) => setTryOnRemoveShoes(e.target.checked)}
+                                                className="w-4 h-4 mt-0.5 rounded text-orange-600 focus:ring-orange-500 cursor-pointer accent-orange-600 shrink-0"
+                                            />
+                                            <div className="flex flex-col min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="text-sm font-semibold text-slate-800">
+                                                        去掉鞋子（默认赤足 / 光脚）
+                                                    </span>
+                                                    {tryOnRemoveShoes ? (
+                                                        <span className="text-[11px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">默认去除鞋子</span>
+                                                    ) : (
+                                                        <span className="text-[11px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">允许使用衣服图鞋袜</span>
+                                                    )}
+                                                </div>
+                                                <span className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                                                    {tryOnRemoveShoes 
+                                                        ? "【已勾选】AI 提示词将明确去除鞋子和高跟鞋，生成赤足/光脚效果（双脚平踩地面，若搭配丝袜则仅穿丝袜不穿鞋）。" 
+                                                        : "【未勾选】取消去除鞋子限制。AI 将允许保留并穿戴上传衣服图里的鞋子和袜子，或生成与整套穿搭协调的鞋袜。"}
+                                                </span>
+                                            </div>
+                                        </label>
                                     </div>
                                 </div>
                             )}
