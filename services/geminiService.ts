@@ -68,19 +68,24 @@ export const generateImageEdit = async (
     gptApiKey?: string;
     model: string;
     imageSize?: '1K' | '2K' | '4K';
+    aspectRatio?: string;
   }
 ): Promise<string> => {
-  const { useCustomApi, customBaseUrl, customApiKey, gptApiKey, model, imageSize } = config;
+  const { useCustomApi, customBaseUrl, customApiKey, gptApiKey, model, imageSize, aspectRatio } = config;
   
   if (model === 'gpt-image-2') {
     if (!gptApiKey) {
       throw new Error("gpt-image-2 API Key 缺失。请在设置中输入。");
     }
 
+    const gptPrompt = (aspectRatio && aspectRatio !== 'auto') 
+      ? `${prompt} (Aspect ratio: ${aspectRatio})` 
+      : prompt;
+
     const formData = new FormData();
     const blob = base64ToBlob(base64Image, mimeType);
     formData.append("image", blob, "image.png");
-    formData.append("prompt", prompt);
+    formData.append("prompt", gptPrompt);
     formData.append("model", "gpt-image-2");
     formData.append("n", "1");
 
@@ -117,12 +122,20 @@ export const generateImageEdit = async (
   // Prepare generation config
   const generationConfig: any = {};
   
-  // Only apply imageConfig (resolution) for the Pro model (Nano Banana 2 / gemini-3-pro-image-preview) or Flash Preview
-  if ((model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview') && imageSize) {
-    generationConfig.imageConfig = {
-      imageSize: imageSize
-    };
+  // Apply imageConfig for models that support it (Pro or Flash Preview)
+  if (model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview') {
+    generationConfig.imageConfig = {};
+    if (imageSize) {
+      generationConfig.imageConfig.imageSize = imageSize;
+    }
+    if (aspectRatio && aspectRatio !== 'auto') {
+      generationConfig.imageConfig.aspectRatio = aspectRatio;
+    }
   }
+
+  const ratioPromptText = (aspectRatio && aspectRatio !== 'auto')
+    ? ` Output aspect ratio: ${aspectRatio}. Ensure the composition strictly matches ${aspectRatio}.`
+    : '';
 
   try {
     const response = await ai.models.generateContent({
@@ -136,7 +149,7 @@ export const generateImageEdit = async (
             },
           },
           {
-            text: `${prompt} Maintain the character's visual identity and style as much as possible. High quality, photorealistic.`,
+            text: `${prompt}${ratioPromptText} Maintain the character's visual identity and style as much as possible. High quality, photorealistic.${(aspectRatio && aspectRatio !== 'auto') ? `\n${aspectRatio}` : ''}`,
           },
         ],
       },

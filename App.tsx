@@ -99,6 +99,15 @@ const DEFAULT_CUSTOM_SELFIE_POSES = [
   "扶手椅坐姿 (透视延伸)"
 ];
 
+const SELFIE_ASPECT_RATIOS = [
+  { value: '9:16', label: '9:16', sub: '竖屏全身', isDefault: true },
+  { value: '3:4', label: '3:4', sub: '经典人像' },
+  { value: '1:1', label: '1:1', sub: '正方形' },
+  { value: '4:3', label: '4:3', sub: '横向构图' },
+  { value: '16:9', label: '16:9', sub: '宽屏壁纸' },
+  { value: 'auto', label: '自适应', sub: '保持原图' },
+];
+
 const buildTryOnPrompt = (options: {
   mode: 'image' | 'prompt';
   clothingPrompt?: string;
@@ -304,6 +313,7 @@ const App: React.FC = () => {
   // Selfie Variation State (New Tab)
   const [selfieSourceImages, setSelfieSourceImages] = useState<UploadedImage[]>([]);
   const [selfieVarMode, setSelfieVarMode] = useState<'preset' | 'prompt'>('preset');
+  const [selfieAspectRatio, setSelfieAspectRatio] = useState<string>('9:16');
   const [selfieCustomPromptsText, setSelfieCustomPromptsText] = useState<string>(
     DEFAULT_CUSTOM_SELFIE_POSES.join('\n')
   );
@@ -315,6 +325,7 @@ const App: React.FC = () => {
     result: GenerationResult;
     prompt: string;
     selfieMode?: 'preset' | 'prompt';
+    aspectRatio?: string;
   }[]>([]);
   const [selfieVarOnlyStanding, setSelfieVarOnlyStanding] = useState(false);
   const [selfieVarBlockFace, setSelfieVarBlockFace] = useState(true);
@@ -921,6 +932,7 @@ const App: React.FC = () => {
             prompts: template.prompts,
             prompt: randomPrompt,
             selfieMode: 'preset',
+            aspectRatio: selfieAspectRatio,
             result: {
               id,
               poseId: 'selfie-var',
@@ -946,6 +958,7 @@ const App: React.FC = () => {
             prompts: [posePrompt],
             prompt: posePrompt,
             selfieMode: 'prompt',
+            aspectRatio: selfieAspectRatio,
             result: {
               id,
               poseId: 'selfie-var',
@@ -993,11 +1006,15 @@ const App: React.FC = () => {
                 finalPrompt += "Maintain clothes and background identity. High quality photorealistic.";
                 
                 const sourceImage = selfieSourceImages[item.sourceIndex];
+                const targetRatio = item.aspectRatio || selfieAspectRatio;
                 const imageUrl = await generateImageEdit(
                   sourceImage.base64,
                   sourceImage.mimeType,
                   finalPrompt,
-                  commonApiConfig
+                  {
+                    ...commonApiConfig,
+                    aspectRatio: targetRatio !== 'auto' ? targetRatio : undefined,
+                  }
                 );
 
                 setSelfieResults(prev => prev.map(r => 
@@ -1077,11 +1094,15 @@ const App: React.FC = () => {
 
       finalPrompt += "Maintain clothes and background identity. High quality photorealistic.";
 
+      const targetRatio = item.aspectRatio || selfieAspectRatio;
       const imageUrl = await generateImageEdit(
         sourceImage.base64,
         sourceImage.mimeType,
         finalPrompt,
-        commonApiConfig
+        {
+          ...commonApiConfig,
+          aspectRatio: targetRatio !== 'auto' ? targetRatio : undefined,
+        }
       );
 
       setSelfieResults(prev => prev.map(r => 
@@ -2987,37 +3008,78 @@ const App: React.FC = () => {
                             />
                         </div>
                         
-                        {selfieSourceImages.length > 0 && (
-                            <div className="mt-6 space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                <h3 className="text-sm font-bold text-slate-700">生成选项</h3>
-                                
-                                {selfieVarMode === 'preset' && (
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-sm text-slate-600 flex items-center gap-2 cursor-pointer">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={selfieVarOnlyStanding}
-                                                onChange={(e) => setSelfieVarOnlyStanding(e.target.checked)}
-                                                className="rounded text-indigo-600 focus:ring-indigo-500"
-                                            />
-                                            只生成不同的站姿和手势
-                                        </label>
-                                    </div>
-                                )}
+                        {/* Generation Options & Aspect Ratio */}
+                        <div className="mt-6 space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+                                    <span>⚙️ 生成选项与画面比例</span>
+                                </h3>
+                                <span className="text-xs text-indigo-600 font-medium bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                                    默认固定 9:16 (可自选)
+                                </span>
+                            </div>
 
-                                <div className="flex items-center justify-between">
+                            {/* Aspect Ratio Selector */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-600 flex items-center gap-1">
+                                    <span>输出画面比例：</span>
+                                    <span className="text-slate-400 font-normal">（当前：{selfieAspectRatio === 'auto' ? '保持原图比例' : selfieAspectRatio}）</span>
+                                </label>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                                    {SELFIE_ASPECT_RATIOS.map((ratio) => {
+                                        const isSelected = selfieAspectRatio === ratio.value;
+                                        return (
+                                            <button
+                                                key={ratio.value}
+                                                type="button"
+                                                onClick={() => setSelfieAspectRatio(ratio.value)}
+                                                className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                                                    isSelected
+                                                        ? 'bg-indigo-50 border-indigo-500 text-indigo-700 ring-2 ring-indigo-400/30 shadow-sm font-bold'
+                                                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-sm font-bold">{ratio.label}</span>
+                                                    {ratio.isDefault && (
+                                                        <span className="text-[9px] bg-indigo-600 text-white px-1 py-0.2 rounded font-normal">默认</span>
+                                                    )}
+                                                </div>
+                                                <span className="text-[10px] text-slate-400 mt-0.5 whitespace-nowrap">
+                                                    {ratio.sub}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            
+                            {selfieVarMode === 'preset' && (
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
                                     <label className="text-sm text-slate-600 flex items-center gap-2 cursor-pointer">
                                         <input 
                                             type="checkbox" 
-                                            checked={selfieVarBlockFace}
-                                            onChange={(e) => setSelfieVarBlockFace(e.target.checked)}
+                                            checked={selfieVarOnlyStanding}
+                                            onChange={(e) => setSelfieVarOnlyStanding(e.target.checked)}
                                             className="rounded text-indigo-600 focus:ring-indigo-500"
                                         />
-                                        手机全程挡脸
+                                        只生成不同的站姿和手势
                                     </label>
                                 </div>
+                            )}
+
+                            <div className="flex items-center justify-between pt-1">
+                                <label className="text-sm text-slate-600 flex items-center gap-2 cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={selfieVarBlockFace}
+                                        onChange={(e) => setSelfieVarBlockFace(e.target.checked)}
+                                        className="rounded text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    手机全程挡脸
+                                </label>
                             </div>
-                        )}
+                        </div>
                         
                         {selfieSourceImages.length > 0 && (
                              <div className="mt-6 flex justify-center animate-in fade-in slide-in-from-bottom-2">
@@ -3071,11 +3133,16 @@ const App: React.FC = () => {
                                         <div key={item.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col group">
                                             {/* Header */}
                                             <div className="p-2 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                                                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">图 {sourceIndex + 1} - {templateLabel}</span>
+                                                <div className="flex items-center gap-1.5 overflow-hidden">
+                                                    <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 truncate">图 {sourceIndex + 1} - {templateLabel}</span>
+                                                    <span className="text-[9px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-mono font-medium border border-indigo-100/80 shrink-0">
+                                                        {item.aspectRatio === 'auto' ? '自适应' : (item.aspectRatio || '9:16')}
+                                                    </span>
+                                                </div>
                                                 <button 
                                                     onClick={() => retrySelfieVariation(item.id)}
                                                     disabled={result.status === 'loading'}
-                                                    className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white rounded transition-colors disabled:opacity-50"
+                                                    className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white rounded transition-colors disabled:opacity-50 shrink-0"
                                                     title="重新生成这张"
                                                 >
                                                     <RefreshCw size={14} className={result.status === 'loading' ? 'animate-spin' : ''} />
@@ -3083,7 +3150,14 @@ const App: React.FC = () => {
                                             </div>
 
                                             {/* Image Area */}
-                                            <div className="relative aspect-[3/4] bg-slate-50 flex items-center justify-center overflow-hidden">
+                                            <div className={`relative ${
+                                                item.aspectRatio === '9:16' ? 'aspect-[9/16]' :
+                                                item.aspectRatio === '3:4' ? 'aspect-[3/4]' :
+                                                item.aspectRatio === '1:1' ? 'aspect-square' :
+                                                item.aspectRatio === '4:3' ? 'aspect-[4/3]' :
+                                                item.aspectRatio === '16:9' ? 'aspect-[16/9]' :
+                                                'aspect-[9/16]'
+                                            } bg-slate-50 flex items-center justify-center overflow-hidden`}>
                                                 {result.status === 'loading' && (
                                                     <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
                                                 )}
