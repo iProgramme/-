@@ -558,18 +558,22 @@ const App: React.FC = () => {
     
     for (const r of results) {
        if (r.status === 'success' && r.imageUrl) {
+         // Sanitize name: remove any slashes, backslashes, colons, etc. to prevent unwanted subfolders in ZIP
+         const safeName = r.name.replace(/[/\\?%*:|"<>]/g, '_');
+
          if (isMultiGroup && r.groupName) {
-           // Multiple source images in batch: keep separate folders per group
-           if (!processedGroups.has(r.groupName)) {
-             processedGroups.add(r.groupName);
+           const safeGroupName = r.groupName.replace(/[/\\?%*:|"<>]/g, '_');
+           // Multiple source images in batch: keep separate folders per group, directly flatten files inside
+           if (!processedGroups.has(safeGroupName)) {
+             processedGroups.add(safeGroupName);
              const original = results.find(item => item.groupName === r.groupName)?.originalImage;
              if (original) {
                const blob = await fetch(`data:${original.mimeType};base64,${original.base64}`).then(res => res.blob());
-               zip.file(`${r.groupName}/00_原图.png`, blob);
+               zip.file(`${safeGroupName}/00_原图.png`, blob);
              }
            }
            const blob = await fetchImage(r.imageUrl);
-           zip.file(`${r.groupName}/${r.name}.png`, blob);
+           zip.file(`${safeGroupName}/${safeName}.png`, blob);
          } else {
            // Single source image: flat structure directly in ZIP root
            if (r.originalImage && !processedGroups.has('original')) {
@@ -578,7 +582,7 @@ const App: React.FC = () => {
              zip.file(`00_原图.png`, blob);
            }
            const blob = await fetchImage(r.imageUrl);
-           zip.file(`${r.name}.png`, blob);
+           zip.file(`${safeName}.png`, blob);
          }
        }
     }
@@ -1123,15 +1127,29 @@ const App: React.FC = () => {
   };
 
   const downloadAllSelfieResults = async () => {
+    // Count variations per image group to generate sequential flat filenames
+    const groupCounters: Record<string, number> = {};
+
     const downloadData = selfieResults
       .filter(r => r.result.status === 'success' && r.result.imageUrl)
-      .map(r => ({
-        imageUrl: r.result.imageUrl,
-        status: r.result.status,
-        originalImage: selfieSourceImages[r.sourceIndex],
-        groupName: `image_${r.sourceIndex + 1}`,
-        name: `variation_${r.templateLabel.replace(/\s+/g, '_')}`
-      }));
+      .map(r => {
+        const groupKey = `image_${r.sourceIndex + 1}`;
+        groupCounters[groupKey] = (groupCounters[groupKey] || 0) + 1;
+        const indexInGroup = groupCounters[groupKey];
+
+        // Sanitize label: replace any slashes, colons, or invalid chars so they don't become subdirectories
+        const cleanLabel = r.templateLabel
+          .replace(/[/\\?%*:|"<>]/g, '_')
+          .replace(/\s+/g, '_');
+
+        return {
+          imageUrl: r.result.imageUrl,
+          status: r.result.status,
+          originalImage: selfieSourceImages[r.sourceIndex],
+          groupName: groupKey,
+          name: `${String(indexInGroup).padStart(2, '0')}_变体_${cleanLabel}`
+        };
+      });
     
     if (downloadData.length === 0) return;
     await downloadResultsAsZip(downloadData, 'selfie_variations');
