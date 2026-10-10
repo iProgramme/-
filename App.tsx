@@ -395,8 +395,9 @@ const App: React.FC = () => {
 
   // Model Selection State
   // 'gemini-2.5-flash-image' = Nano Banana 1
-  // 'gemini-3-pro-image-preview' = Nano Banana 2
-  // 'gemini-3.1-flash-image-preview' = Nano Banana 3
+  // 'gemini-3-pro-image-preview' = Nano Banana Pro
+  // 'gemini-3.1-flash-image-preview' = Nano Banana 2
+  // 'gemini-nano-banana-2.1-preview' = Nano Banana 2.1
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3.1-flash-image-preview');
   const [selectedResolution, setSelectedResolution] = useState<'1K' | '2K' | '4K'>('2K');
 
@@ -2636,8 +2637,9 @@ const App: React.FC = () => {
                             className="appearance-none bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full pl-3 pr-8 py-2 cursor-pointer font-medium hover:bg-slate-100 transition-colors"
                         >
                             <option value="gemini-2.5-flash-image">Nano Banana 1 (快速/Flash)</option>
-                            <option value="gemini-3-pro-image-preview">Nano Banana 2 (高清/Pro)</option>
-                            <option value="gemini-3.1-flash-image-preview">Nano Banana 3 (Flash Preview)</option>
+                            <option value="gemini-3-pro-image-preview">Nano Banana Pro (高清/Pro)</option>
+                            <option value="gemini-3.1-flash-image-preview">Nano Banana 2 (Flash Preview)</option>
+                            <option value="gemini-nano-banana-2.1-preview">Nano Banana 2.1 (Preview)</option>
                             <option value="gpt-image-2">GPT Image 2 (专用)</option>
                         </select>
                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
@@ -2646,7 +2648,7 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 
-                {(selectedModel === 'gemini-3-pro-image-preview' || selectedModel === 'gemini-3.1-flash-image-preview') && (
+                {(selectedModel === 'gemini-3-pro-image-preview' || selectedModel === 'gemini-3.1-flash-image-preview' || selectedModel === 'gemini-nano-banana-2.1-preview') && (
                     <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
                         <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"></div>
                         <span className="text-sm font-medium text-slate-700 flex items-center gap-1.5">

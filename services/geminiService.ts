@@ -123,7 +123,7 @@ export const generateImageEdit = async (
   const generationConfig: any = {};
   
   // Apply imageConfig for models that support it (Pro or Flash Preview)
-  if (model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview') {
+  if (model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview' || model === 'gemini-nano-banana-2.1-preview') {
     generationConfig.imageConfig = {};
     if (imageSize) {
       generationConfig.imageConfig.imageSize = imageSize;
@@ -262,7 +262,7 @@ export const generatePoseTransfer = async (
 
   const generationConfig: any = {};
   
-  if (model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview') {
+  if (model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview' || model === 'gemini-nano-banana-2.1-preview') {
     generationConfig.imageConfig = {};
     if (imageSize) {
       generationConfig.imageConfig.imageSize = imageSize;
@@ -407,7 +407,7 @@ export const generateImageWithReference = async (
 
   const generationConfig: any = {};
   
-  if ((model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview')) {
+  if ((model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview' || model === 'gemini-nano-banana-2.1-preview')) {
     generationConfig.imageConfig = {
       aspectRatio: '9:16'
     };
@@ -646,7 +646,7 @@ export const generateTryOn = async (
     }
   };
   
-  if ((model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview') && imageSize) {
+  if ((model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview' || model === 'gemini-nano-banana-2.1-preview') && imageSize) {
     generationConfig.imageConfig.imageSize = imageSize;
   }
 
