@@ -11,7 +11,7 @@ import { ImageModal } from './components/ImageModal';
 import { Button } from './components/Button';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { Layers, Wand2, Sparkles, AlertTriangle, AlertCircle, Settings, X, Check, Globe, Key, Smartphone, ArrowRight, Download, ZoomIn, RefreshCw, Hash, Camera, Copy, Monitor, Zap, Box, Shirt, BookOpen, HelpCircle, CheckCircle2, PlayCircle, Video, Compass } from 'lucide-react';
+import { Layers, Wand2, Sparkles, AlertTriangle, AlertCircle, Settings, X, Check, Globe, Key, Smartphone, ArrowRight, Download, ZoomIn, RefreshCw, Hash, Camera, Copy, Monitor, Zap, Box, Shirt, BookOpen, HelpCircle, CheckCircle2, PlayCircle, Video, Compass, ExternalLink } from 'lucide-react';
 
 // Selfie Variations Templates (Single Image -> 8 Variations)
 // 3 Sitting, 3 Kneeling, 2 Standing
@@ -382,12 +382,32 @@ const App: React.FC = () => {
   const [useCustomApi, setUseCustomApi] = useState(() => {
     return localStorage.getItem('useCustomApi') === 'true';
   });
-  const [customBaseUrl, setCustomBaseUrl] = useState(() => {
-    return localStorage.getItem('customBaseUrl') || 'https://api.vectorengine.ai';
+  
+  // Custom API Provider: 'default' (默认地址) or 'itusheng' (爱图生)
+  const [customApiProvider, setCustomApiProvider] = useState<'default' | 'itusheng'>(() => {
+    return (localStorage.getItem('customApiProvider') as 'default' | 'itusheng') || 'default';
   });
-  const [customApiKey, setCustomApiKey] = useState(() => {
-    return localStorage.getItem('customApiKey') || '';
+
+  // Separate keys for each provider
+  const [defaultApiKey, setDefaultApiKey] = useState(() => {
+    return localStorage.getItem('defaultApiKey') || localStorage.getItem('customApiKey') || '';
   });
+  const [itushengApiKey, setItushengApiKey] = useState(() => {
+    return localStorage.getItem('itushengApiKey') || '';
+  });
+
+  const [copiedAddress, setCopiedAddress] = useState(false);
+  const handleCopyItushengAddress = () => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText('https://www.itusheng.xyz');
+    }
+    setCopiedAddress(true);
+    setTimeout(() => setCopiedAddress(false), 2000);
+  };
+
+  // Active key & base URL computed from provider selection
+  const activeCustomApiKey = customApiProvider === 'itusheng' ? itushengApiKey : defaultApiKey;
+  const customBaseUrl = customApiProvider === 'itusheng' ? 'https://www.itusheng.xyz' : 'https://api.vectorengine.cn';
 
   const [gptApiKey, setGptApiKey] = useState(() => {
     return localStorage.getItem('gptApiKey') || '';
@@ -410,6 +430,7 @@ const App: React.FC = () => {
     totalGranted: number | null;
     userName: string | null;
     keyQueried: 'custom' | 'gpt' | '';
+    providerQueried?: 'default' | 'itusheng';
   }>({
     isLoading: false,
     error: null,
@@ -418,10 +439,11 @@ const App: React.FC = () => {
     totalUsed: null,
     totalGranted: null,
     userName: null,
-    keyQueried: ''
+    keyQueried: '',
+    providerQueried: 'default'
   });
 
-  const checkKeyUsage = async (token: string, keyType: 'custom' | 'gpt') => {
+  const checkKeyUsage = async (token: string, keyType: 'custom' | 'gpt', provider: 'default' | 'itusheng' = customApiProvider) => {
     if (!token) {
       setBalanceCheck({
         isLoading: false,
@@ -431,7 +453,8 @@ const App: React.FC = () => {
         totalUsed: null,
         totalGranted: null,
         userName: null,
-        keyQueried: keyType
+        keyQueried: keyType,
+        providerQueried: provider
       });
       return;
     }
@@ -444,11 +467,16 @@ const App: React.FC = () => {
       totalUsed: null,
       totalGranted: null,
       userName: null,
-      keyQueried: keyType
+      keyQueried: keyType,
+      providerQueried: provider
     });
 
     try {
-      const response = await fetch("/api/balance", {
+      const endpoint = keyType === 'custom' && provider === 'itusheng' 
+        ? '/api/balance/itusheng' 
+        : '/api/balance';
+
+      const response = await fetch(`${endpoint}?provider=${provider}`, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${token}`
@@ -477,7 +505,8 @@ const App: React.FC = () => {
           totalUsed: result.data.total_used,
           totalGranted: result.data.total_granted,
           userName: result.data.name || 'Token',
-          keyQueried: keyType
+          keyQueried: keyType,
+          providerQueried: provider
         });
       } else {
         const errMsg = result?.error?.message || result?.message || '查询失败，可能是无效密钥或接口出错';
@@ -493,17 +522,22 @@ const App: React.FC = () => {
         totalUsed: null,
         totalGranted: null,
         userName: null,
-        keyQueried: keyType
+        keyQueried: keyType,
+        providerQueried: provider
       });
     }
   };
 
   useEffect(() => {
     localStorage.setItem('useCustomApi', useCustomApi.toString());
+    localStorage.setItem('customApiProvider', customApiProvider);
+    localStorage.setItem('defaultApiKey', defaultApiKey);
+    localStorage.setItem('itushengApiKey', itushengApiKey);
+    // Keep customApiKey and customBaseUrl in sync for backward compatibility
+    localStorage.setItem('customApiKey', activeCustomApiKey);
     localStorage.setItem('customBaseUrl', customBaseUrl);
-    localStorage.setItem('customApiKey', customApiKey);
     localStorage.setItem('gptApiKey', gptApiKey);
-  }, [useCustomApi, customBaseUrl, customApiKey, gptApiKey]);
+  }, [useCustomApi, customApiProvider, defaultApiKey, itushengApiKey, activeCustomApiKey, customBaseUrl, gptApiKey]);
 
   useEffect(() => {
     if (!process.env.API_KEY && !useCustomApi) {
@@ -531,7 +565,7 @@ const App: React.FC = () => {
   const commonApiConfig = {
     useCustomApi,
     customBaseUrl,
-    customApiKey,
+    customApiKey: activeCustomApiKey,
     gptApiKey,
     model: selectedModel,
     imageSize: selectedResolution
@@ -826,8 +860,8 @@ const App: React.FC = () => {
                     : r
                 ));
                 success = true;
-                if (useCustomApi && customApiKey) {
-                  checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                if (useCustomApi && activeCustomApiKey) {
+                  checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider).catch(() => {});
                 }
               } catch (error: any) {
                 const errorMsg = error.message || '';
@@ -890,8 +924,8 @@ const App: React.FC = () => {
         commonApiConfig
       );
       setSamePoseResults(prev => prev.map(r => r.id === resultId ? { ...r, result: { ...r.result, status: 'success', imageUrl } } : r));
-      if (useCustomApi && customApiKey) {
-        checkKeyUsage(customApiKey, 'custom').catch(() => {});
+      if (useCustomApi && activeCustomApiKey) {
+        checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider).catch(() => {});
       }
     } catch (error: any) {
       setSamePoseResults(prev => prev.map(r => r.id === resultId ? { ...r, result: { ...r.result, status: 'error', error: error.message || 'Retry failed' } } : r));
@@ -1028,8 +1062,8 @@ const App: React.FC = () => {
                     : r
                 ));
                 success = true;
-                if (useCustomApi && customApiKey) {
-                  checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                if (useCustomApi && activeCustomApiKey) {
+                  checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider).catch(() => {});
                 }
               } catch (error: any) {
                 const errorMsg = error.message || '';
@@ -1115,8 +1149,8 @@ const App: React.FC = () => {
           ? { ...r, prompt: newRandomPrompt, result: { ...r.result, status: 'success', imageUrl } } 
           : r
       ));
-      if (useCustomApi && customApiKey) {
-        checkKeyUsage(customApiKey, 'custom').catch(() => {});
+      if (useCustomApi && activeCustomApiKey) {
+        checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider).catch(() => {});
       }
     } catch (error: any) {
       setSelfieResults(prev => prev.map(r => 
@@ -1221,8 +1255,8 @@ const App: React.FC = () => {
                 ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
                 : r
             ));
-            if (useCustomApi && customApiKey) {
-              checkKeyUsage(customApiKey, 'custom').catch(() => {});
+            if (useCustomApi && activeCustomApiKey) {
+              checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider).catch(() => {});
             }
           } catch (error: any) {
             setBatchResults(prev => prev.map(r => 
@@ -1264,8 +1298,8 @@ const App: React.FC = () => {
           ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
           : r
       ));
-      if (useCustomApi && customApiKey) {
-        checkKeyUsage(customApiKey, 'custom').catch(() => {});
+      if (useCustomApi && activeCustomApiKey) {
+        checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider).catch(() => {});
       }
     } catch (error: any) {
       setBatchResults(prev => prev.map(r => 
@@ -1366,8 +1400,8 @@ const App: React.FC = () => {
                     : r
                 ));
                 success = true;
-                if (useCustomApi && customApiKey) {
-                  checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                if (useCustomApi && activeCustomApiKey) {
+                  checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider).catch(() => {});
                 }
               } catch (error: any) {
                 const errorMsg = error.message || '';
@@ -1444,8 +1478,8 @@ const App: React.FC = () => {
           ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
           : r
       ));
-      if (useCustomApi && customApiKey) {
-        checkKeyUsage(customApiKey, 'custom').catch(() => {});
+      if (useCustomApi && activeCustomApiKey) {
+        checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider).catch(() => {});
       }
     } catch (error: any) {
       setPoseTransferResults(prev => prev.map(r => 
@@ -1514,8 +1548,8 @@ const App: React.FC = () => {
                     : r
                 ));
                 success = true;
-                if (useCustomApi && customApiKey) {
-                  checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                if (useCustomApi && activeCustomApiKey) {
+                  checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider).catch(() => {});
                 }
               } catch (error: any) {
                 const errorMsg = error.message || '';
@@ -1571,8 +1605,8 @@ const App: React.FC = () => {
       setTextToImageResults(prev => prev.map(r => 
         r.id === id ? { ...r, result: { ...r.result, status: 'success', imageUrl } } : r
       ));
-      if (useCustomApi && customApiKey) {
-        checkKeyUsage(customApiKey, 'custom').catch(() => {});
+      if (useCustomApi && activeCustomApiKey) {
+        checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider).catch(() => {});
       }
     } catch (error: any) {
       setTextToImageResults(prev => prev.map(r => 
@@ -1716,8 +1750,8 @@ const App: React.FC = () => {
                       : r
                   ));
                   success = true;
-                  if (useCustomApi && customApiKey) {
-                    checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                  if (useCustomApi && activeCustomApiKey) {
+                    checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider).catch(() => {});
                   }
                 } catch (error: any) {
                   const errorMsg = error.message || '';
@@ -1848,8 +1882,8 @@ const App: React.FC = () => {
                       : r
                   ));
                   success = true;
-                  if (useCustomApi && customApiKey) {
-                    checkKeyUsage(customApiKey, 'custom').catch(() => {});
+                  if (useCustomApi && activeCustomApiKey) {
+                    checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider).catch(() => {});
                   }
                 } catch (error: any) {
                   const errorMsg = error.message || '';
@@ -2008,8 +2042,8 @@ const App: React.FC = () => {
           ? { ...r, result: { ...r.result, status: 'success', imageUrl } } 
           : r
       ));
-      if (useCustomApi && customApiKey) {
-        checkKeyUsage(customApiKey, 'custom').catch(() => {});
+      if (useCustomApi && activeCustomApiKey) {
+        checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider).catch(() => {});
       }
     } catch (error: any) {
       setTryOnResults(prev => prev.map(r => 
@@ -2064,10 +2098,10 @@ const App: React.FC = () => {
           </div>
           <div className="flex items-center gap-3">
             {/* 外部查询余额组件 */}
-            {selectedModel !== 'gpt-image-2' && useCustomApi && customApiKey ? (
+            {selectedModel !== 'gpt-image-2' && useCustomApi && activeCustomApiKey ? (
               <div className="relative group/balance flex items-center gap-2 bg-slate-50 border border-slate-200/70 rounded-lg pl-3 pr-2 py-1.5 transition-all text-xs">
                 <span className="text-slate-500 font-medium whitespace-nowrap">
-                  自定义 API 余额:
+                  {customApiProvider === 'itusheng' ? '爱图生' : '默认'} API 余额:
                 </span>
                 <span className="font-bold text-teal-600 font-mono whitespace-nowrap text-center">
                   {balanceCheck.isLoading && balanceCheck.keyQueried === 'custom' ? (
@@ -2083,7 +2117,7 @@ const App: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    checkKeyUsage(customApiKey, 'custom');
+                    checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider);
                   }}
                   className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-medium px-2.5 py-1 rounded-md transition-all text-xs shadow-sm flex items-center gap-1 cursor-pointer font-sans"
                   title="点击查询最新额度"
@@ -2096,7 +2130,7 @@ const App: React.FC = () => {
                 {balanceCheck.keyQueried === 'custom' && (balanceCheck.success || balanceCheck.error) && (
                   <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-xl p-3 shadow-xl z-50 opacity-0 group-hover/balance:opacity-100 transition-opacity duration-200 pointer-events-none">
                     <div className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-1.5">
-                      额度账单详情
+                      额度账单详情 ({balanceCheck.providerQueried === 'itusheng' ? '爱图生' : '默认地址'})
                     </div>
                     {balanceCheck.success && balanceCheck.totalAvailable !== null && (
                       <div className="space-y-1.5 text-[11px] text-slate-600 font-medium">
@@ -2137,7 +2171,7 @@ const App: React.FC = () => {
               <span>发抖音教程</span>
             </button>
             <div className={`hidden sm:block text-xs font-medium px-3 py-1 rounded-full ${useCustomApi ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
-              {useCustomApi ? '自定义 API' : '官方 Gemini'}
+              {useCustomApi ? (customApiProvider === 'itusheng' ? '爱图生 API' : '默认 API') : '官方 Gemini'}
             </div>
             <button 
               onClick={() => setShowSettings(!showSettings)}
@@ -2177,19 +2211,152 @@ const App: React.FC = () => {
 
                 {useCustomApi && (
                   <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                    
+                    {/* 地址节点选择器：用户可在默认地址与“爱图生”地址之间切换，不显示具体URL */}
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
-                        <Key size={14} className="text-slate-400" /> API Key
+                      <label className="text-sm font-medium text-slate-700 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <Sparkles size={14} className="text-blue-500" /> API 地址服务商
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-normal">
+                          当前生效：{customApiProvider === 'itusheng' ? '爱图生' : '默认地址'}
+                        </span>
                       </label>
-                      <input 
-                        type="password"
-                        value={customApiKey}
-                        onChange={(e) => setCustomApiKey(e.target.value)}
-                        placeholder="输入您的密钥"
-                        className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-mono"
-                      />
+                      <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomApiProvider('default');
+                            setBalanceCheck(prev => ({ ...prev, keyQueried: '' }));
+                          }}
+                          className={`py-2 px-3 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                            customApiProvider === 'default'
+                              ? 'bg-white text-blue-600 shadow-sm font-bold'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${customApiProvider === 'default' ? 'bg-blue-600' : 'bg-slate-300'}`} />
+                          默认地址
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomApiProvider('itusheng');
+                            setBalanceCheck(prev => ({ ...prev, keyQueried: '' }));
+                          }}
+                          className={`py-2 px-3 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                            customApiProvider === 'itusheng'
+                              ? 'bg-white text-indigo-600 shadow-sm font-bold'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${customApiProvider === 'itusheng' ? 'bg-indigo-600' : 'bg-slate-300'}`} />
+                          <span>爱图生</span>
+                          <span className="text-[10px] font-normal text-slate-400">itusheng.xyz</span>
+                        </button>
+                      </div>
                     </div>
+
+                    {/* 分别输入两个节点的 Key */}
+                    {customApiProvider === 'default' ? (
+                      <div className="space-y-1.5 animate-in fade-in duration-200">
+                        <div className="flex justify-between items-center">
+                          <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                            <Key size={14} className="text-blue-500" /> 默认地址 API Key
+                          </label>
+                          <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-medium">默认渠道</span>
+                        </div>
+                        <input 
+                          type="password"
+                          value={defaultApiKey}
+                          onChange={(e) => setDefaultApiKey(e.target.value)}
+                          placeholder="输入默认地址的 API 密钥"
+                          className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-mono"
+                        />
+                        <p className="text-[11px] text-slate-400">该密钥仅用于默认接口节点，已与其他节点隔离存储。</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 animate-in fade-in duration-200">
+                        {/* 爱图生平台地址与访问链接 */}
+                        <div className="bg-gradient-to-r from-indigo-50/90 to-purple-50/70 border border-indigo-150 rounded-xl p-3 text-xs space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="font-bold text-indigo-950 flex items-center gap-1.5 text-xs">
+                              <Globe size={14} className="text-indigo-600" />
+                              <span>爱图生地址 (平台官网)</span>
+                            </label>
+                            <a
+                              href="https://www.itusheng.xyz"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-semibold hover:underline text-[11px] bg-white px-2 py-0.5 rounded-md border border-indigo-200 shadow-xs transition-colors"
+                            >
+                              <span>访问官网</span>
+                              <ExternalLink size={11} />
+                            </a>
+                          </div>
+                          
+                          <div className="flex items-center justify-between bg-white rounded-lg px-2.5 py-1.5 border border-indigo-100">
+                            <a
+                              href="https://www.itusheng.xyz"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-indigo-700 hover:text-indigo-900 select-all truncate text-xs hover:underline flex-1"
+                              title="点击前往爱图生官网"
+                            >
+                              https://www.itusheng.xyz
+                            </a>
+                            <button
+                              type="button"
+                              onClick={handleCopyItushengAddress}
+                              className="ml-2 px-2 py-0.5 rounded text-[11px] font-medium text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 flex items-center gap-1 transition-colors shrink-0 border border-slate-100"
+                              title="复制爱图生地址"
+                            >
+                              {copiedAddress ? (
+                                <>
+                                  <Check size={12} className="text-emerald-600" />
+                                  <span className="text-emerald-600 font-semibold">已复制</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy size={12} />
+                                  <span>复制地址</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          
+                          <div className="flex items-center justify-between text-[11px] text-slate-500">
+                            <span>如需注册账号、购买额度或获取专属 API Key，请前往上方爱图生官网。</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                              <Key size={14} className="text-indigo-500" /> 爱图生 API Key
+                            </label>
+                            <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full font-medium">爱图生专用</span>
+                          </div>
+                          <input 
+                            type="password"
+                            value={itushengApiKey}
+                            onChange={(e) => setItushengApiKey(e.target.value)}
+                            placeholder="输入“爱图生”专属 API 密钥 (在 www.itusheng.xyz 获取)"
+                            className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm font-mono"
+                          />
+                          <div className="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>该密钥仅用于爱图生接口节点，已与默认节点隔离存储。</span>
+                            <a
+                              href="https://www.itusheng.xyz"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-indigo-600 hover:text-indigo-800 underline flex items-center gap-0.5 shrink-0 ml-1"
+                            >
+                              获取密钥 <ExternalLink size={10} />
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2212,7 +2379,7 @@ const App: React.FC = () => {
                 {balanceCheck.keyQueried === 'custom' && (balanceCheck.isLoading || balanceCheck.success || balanceCheck.error) && (
                   <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                     <div className="flex justify-between items-center text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      <span>密钥状态汇总 (自定义 API)</span>
+                      <span>密钥状态汇总 ({balanceCheck.providerQueried === 'itusheng' ? '爱图生' : '默认地址'})</span>
                       {balanceCheck.isLoading && <RefreshCw size={12} className="animate-spin text-blue-500" />}
                     </div>
 
@@ -2265,8 +2432,8 @@ const App: React.FC = () => {
                 <Button 
                   onClick={() => {
                     setShowSettings(false);
-                    if (useCustomApi && customApiKey) {
-                      checkKeyUsage(customApiKey, 'custom');
+                    if (useCustomApi && activeCustomApiKey) {
+                      checkKeyUsage(activeCustomApiKey, 'custom', customApiProvider);
                     }
                   }} 
                   className="px-8 bg-slate-900 hover:bg-black"

@@ -36,10 +36,13 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, message: 'API key is required' });
     }
 
-    console.log('Proxying request to vectorengine for token...');
+    const provider = req.query.provider || (req.body && req.body.provider) || 'default';
+    const baseUrl = provider === 'itusheng' ? 'https://www.itusheng.xyz' : 'https://api.vectorengine.cn';
 
-    // Make the actual GET request to Vectorengine API
-    const apiResponse = await fetch('https://api.vectorengine.cn/api/usage/token/', {
+    console.log(`Proxying request to ${baseUrl} for token...`);
+
+    // Make the actual GET request to the selected API provider
+    const apiResponse = await fetch(`${baseUrl}/api/usage/token/`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`

@@ -9,14 +9,16 @@ export default defineConfig(({ mode }) => {
         port: 3000,
         host: '0.0.0.0',
         proxy: {
-          '/api/balance-proxy': {
-            target: 'https://api.vectorengine.cn',
+          '/api/balance/itusheng': {
+            target: 'https://www.itusheng.xyz',
             changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/balance-proxy/, '/api/usage/token/')
+            secure: false,
+            rewrite: (path) => path.replace(/^\/api\/balance\/itusheng/, '/api/usage/token/')
           },
           '/api/balance': {
             target: 'https://api.vectorengine.cn',
             changeOrigin: true,
+            secure: false,
             rewrite: (path) => path.replace(/^\/api\/balance/, '/api/usage/token/')
           }
         }

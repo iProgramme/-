@@ -57,6 +57,15 @@ const handleServiceError = (error: any, fallbackMessage: string): never => {
   throw new Error(`${fallbackMessage}: ${msg}`);
 };
 
+const resolveBaseUrl = (rawUrl?: string): string => {
+  if (!rawUrl || !rawUrl.trim()) return "https://api.vectorengine.cn";
+  let url = rawUrl.trim();
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = `https://${url}`;
+  }
+  return url.replace(/\/+$/, '');
+};
+
 export const generateImageEdit = async (
   base64Image: string,
   mimeType: string,
@@ -114,7 +123,7 @@ export const generateImageEdit = async (
   // Configure options
   const options: any = { apiKey: finalApiKey };
   if (useCustomApi) {
-    options.httpOptions = { baseUrl: "https://api.vectorengine.cn" };
+    options.httpOptions = { baseUrl: resolveBaseUrl(customBaseUrl) };
   }
 
   const ai = new GoogleGenAI(options);
@@ -255,7 +264,7 @@ export const generatePoseTransfer = async (
 
   const options: any = { apiKey: finalApiKey };
   if (useCustomApi) {
-    options.httpOptions = { baseUrl: "https://api.vectorengine.cn" };
+    options.httpOptions = { baseUrl: resolveBaseUrl(customBaseUrl) };
   }
 
   const ai = new GoogleGenAI(options);
@@ -400,7 +409,7 @@ export const generateImageWithReference = async (
 
   const options: any = { apiKey: finalApiKey };
   if (useCustomApi) {
-    options.httpOptions = { baseUrl: "https://api.vectorengine.cn" };
+    options.httpOptions = { baseUrl: resolveBaseUrl(customBaseUrl) };
   }
 
   const ai = new GoogleGenAI(options);
@@ -518,7 +527,7 @@ export const generateTextToImage = async (
 
   const options: any = { apiKey: finalApiKey };
   if (useCustomApi) {
-    options.httpOptions = { baseUrl: "https://api.vectorengine.cn" };
+    options.httpOptions = { baseUrl: resolveBaseUrl(customBaseUrl) };
   }
 
   const ai = new GoogleGenAI(options);
@@ -635,7 +644,7 @@ export const generateTryOn = async (
 
   const options: any = { apiKey: finalApiKey };
   if (useCustomApi) {
-    options.httpOptions = { baseUrl: "https://api.vectorengine.cn" };
+    options.httpOptions = { baseUrl: resolveBaseUrl(customBaseUrl) };
   }
 
   const ai = new GoogleGenAI(options);
