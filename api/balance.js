@@ -37,7 +37,8 @@ export default async function handler(req, res) {
     }
 
     const provider = req.query.provider || (req.body && req.body.provider) || 'default';
-    const baseUrl = provider === 'itusheng' ? 'https://www.itusheng.xyz' : 'https://api.vectorengine.cn';
+    const rawBaseUrl = req.query.baseUrl || (req.body && req.body.baseUrl) || (provider === 'itusheng' ? 'https://www.itusheng.xyz' : 'https://api.vectorengine.cn');
+    const baseUrl = rawBaseUrl.trim().replace(/\/+$/, '');
 
     console.log(`Proxying request to ${baseUrl} for token...`);
 
@@ -49,31 +50,18 @@ export default async function handler(req, res) {
       }
     });
 
-    const data = await apiResponse.json();
+    const data = await apiResponse.json().catch(() => null);
 
-    // Check if the token quota is exhausted based on status codes, returned message, or total available points being <= 0
-    const message = (data?.message || data?.error?.message || '').toLowerCase();
-    const isExhaustedMessage = message.includes('exhausted') || 
-                               message.includes('quota') || 
-                               message.includes('balance') || 
-                               message.includes('insufficient') || 
-                               message.includes('额度') || 
-                               message.includes('用尽') ||
-                               message.includes('point');
-
-    const isExhaustedStatus = [401, 402, 403, 429].includes(apiResponse.status);
-    const hasNoAvailablePoints = data?.success === true && data?.data && typeof data?.data?.total_available === 'number' && data?.data?.total_available <= 0;
-
-    if (isExhaustedStatus || isExhaustedMessage || hasNoAvailablePoints) {
-      return res.status(403).json({
-        error: {
-          message: "该令牌额度已用尽 (request id: 20260622164054695403138c96lrRzi)",
-          type: "new_api_error"
-        }
+    if (!apiResponse.ok) {
+      const errMsg = data?.message || data?.error?.message || `接口请求失败 (HTTP ${apiResponse.status})`;
+      return res.status(apiResponse.status).json({
+        success: false,
+        message: errMsg,
+        error: { message: errMsg }
       });
     }
 
-    return res.status(apiResponse.status).json(data);
+    return res.status(200).json(data);
   } catch (error) {
     console.error('Error proxying balance request:', error);
     

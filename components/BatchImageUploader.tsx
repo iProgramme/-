@@ -26,13 +26,11 @@ export const BatchImageUploader: React.FC<BatchImageUploaderProps> = ({
     const newImages: UploadedImage[] = [];
     const filesArray = Array.from(files);
     
-    // Filter non-images and limit count
-    const validFiles = filesArray.filter(f => f.type.startsWith('image/'));
-    
-    if (currentImages.length + validFiles.length > maxImages) {
-      alert(`最多只能上传 ${maxImages} 张图片`);
-      return;
-    }
+    // Filter non-images and limit count to remaining slots
+    const remainingSlots = Math.max(0, maxImages - currentImages.length);
+    if (remainingSlots <= 0) return;
+    const validFiles = filesArray.filter(f => f.type.startsWith('image/')).slice(0, remainingSlots);
+    if (validFiles.length === 0) return;
 
     let processedCount = 0;
 
@@ -129,12 +127,15 @@ export const BatchImageUploader: React.FC<BatchImageUploaderProps> = ({
                     </div>
                 </div>
             ))}
-             <button 
+            {currentImages.length < maxImages && (
+              <button 
                 onClick={() => fileInputRef.current?.click()}
                 className="aspect-[3/4] rounded-lg border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-slate-50 flex items-center justify-center text-slate-400 hover:text-blue-500 transition-all"
-             >
+                title={`继续添加图片 (最多 ${maxImages} 张)`}
+              >
                 <Plus size={24} />
-             </button>
+              </button>
+            )}
         </div>
       )}
     </div>

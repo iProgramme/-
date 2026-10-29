@@ -361,7 +361,7 @@ const App: React.FC = () => {
   
   // Text to Image States
   const [textToImagePrompt, setTextToImagePrompt] = useState('');
-  const [textToImageRefImage, setTextToImageRefImage] = useState<UploadedImage | null>(null);
+  const [textToImageRefImages, setTextToImageRefImages] = useState<UploadedImage[]>([]);
   const [textToImageCount, setTextToImageCount] = useState<number>(4);
   const [textToImageResults, setTextToImageResults] = useState<{id: string, result: GenerationResult}[]>([]);
 
@@ -388,7 +388,7 @@ const App: React.FC = () => {
     return (localStorage.getItem('customApiProvider') as 'default' | 'itusheng') || 'default';
   });
 
-  // Separate keys for each provider
+  // Separate keys and base URLs for each provider
   const [defaultApiKey, setDefaultApiKey] = useState(() => {
     return localStorage.getItem('defaultApiKey') || localStorage.getItem('customApiKey') || '';
   });
@@ -396,10 +396,17 @@ const App: React.FC = () => {
     return localStorage.getItem('itushengApiKey') || '';
   });
 
+  const [itushengBaseUrl, setItushengBaseUrl] = useState(() => {
+    return localStorage.getItem('itushengBaseUrl') || 'https://www.itusheng.xyz';
+  });
+  const [defaultBaseUrl, setDefaultBaseUrl] = useState(() => {
+    return localStorage.getItem('defaultBaseUrl') || 'https://api.vectorengine.cn';
+  });
+
   const [copiedAddress, setCopiedAddress] = useState(false);
   const handleCopyItushengAddress = () => {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText('https://www.itusheng.xyz');
+      navigator.clipboard.writeText(itushengBaseUrl || 'https://www.itusheng.xyz');
     }
     setCopiedAddress(true);
     setTimeout(() => setCopiedAddress(false), 2000);
@@ -407,7 +414,9 @@ const App: React.FC = () => {
 
   // Active key & base URL computed from provider selection
   const activeCustomApiKey = customApiProvider === 'itusheng' ? itushengApiKey : defaultApiKey;
-  const customBaseUrl = customApiProvider === 'itusheng' ? 'https://www.itusheng.xyz' : 'https://api.vectorengine.cn';
+  const customBaseUrl = customApiProvider === 'itusheng' 
+    ? (itushengBaseUrl || 'https://www.itusheng.xyz') 
+    : (defaultBaseUrl || 'https://api.vectorengine.cn');
 
   const [gptApiKey, setGptApiKey] = useState(() => {
     return localStorage.getItem('gptApiKey') || '';
@@ -417,9 +426,20 @@ const App: React.FC = () => {
   // 'gemini-2.5-flash-image' = Nano Banana 1
   // 'gemini-3-pro-image-preview' = Nano Banana Pro
   // 'gemini-3.1-flash-image-preview' = Nano Banana 2
-  // 'gemini-nano-banana-2.1-preview' = Nano Banana 2.1
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.1-flash-image-preview');
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    const saved = localStorage.getItem('selectedModel');
+    if (saved && saved !== 'gpt-image-2') return saved;
+    return 'gemini-3.1-flash-image-preview';
+  });
   const [selectedResolution, setSelectedResolution] = useState<'1K' | '2K' | '4K'>('2K');
+
+  useEffect(() => {
+    if (selectedModel === 'gpt-image-2') {
+      setSelectedModel('gemini-3.1-flash-image-preview');
+    } else {
+      localStorage.setItem('selectedModel', selectedModel);
+    }
+  }, [selectedModel]);
 
   const [balanceCheck, setBalanceCheck] = useState<{
     isLoading: boolean;
@@ -431,6 +451,7 @@ const App: React.FC = () => {
     userName: string | null;
     keyQueried: 'custom' | 'gpt' | '';
     providerQueried?: 'default' | 'itusheng';
+    baseUrlQueried?: string;
   }>({
     isLoading: false,
     error: null,
@@ -440,10 +461,19 @@ const App: React.FC = () => {
     totalGranted: null,
     userName: null,
     keyQueried: '',
-    providerQueried: 'default'
+    providerQueried: 'default',
+    baseUrlQueried: ''
   });
 
-  const checkKeyUsage = async (token: string, keyType: 'custom' | 'gpt', provider: 'default' | 'itusheng' = customApiProvider) => {
+  const checkKeyUsage = async (
+    token: string, 
+    keyType: 'custom' | 'gpt', 
+    provider: 'default' | 'itusheng' = customApiProvider,
+    customUrl?: string
+  ) => {
+    const rawTargetBaseUrl = customUrl || (provider === 'itusheng' ? (itushengBaseUrl || 'https://www.itusheng.xyz') : (defaultBaseUrl || 'https://api.vectorengine.cn'));
+    const targetBaseUrl = (rawTargetBaseUrl || '').trim().replace(/\/+$/, '');
+
     if (!token) {
       setBalanceCheck({
         isLoading: false,
@@ -454,7 +484,8 @@ const App: React.FC = () => {
         totalGranted: null,
         userName: null,
         keyQueried: keyType,
-        providerQueried: provider
+        providerQueried: provider,
+        baseUrlQueried: targetBaseUrl
       });
       return;
     }
@@ -468,35 +499,63 @@ const App: React.FC = () => {
       totalGranted: null,
       userName: null,
       keyQueried: keyType,
-      providerQueried: provider
+      providerQueried: provider,
+      baseUrlQueried: targetBaseUrl
     });
 
     try {
-      const endpoint = keyType === 'custom' && provider === 'itusheng' 
-        ? '/api/balance/itusheng' 
-        : '/api/balance';
+      let result: any = null;
+      let querySuccess = false;
 
-      const response = await fetch(`${endpoint}?provider=${provider}`, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${token}`
-        },
-        redirect: "follow"
-      });
-
-      let result: any;
+      // 1. Try querying the target base URL directly (works for itusheng and any CORS-enabled endpoints)
       try {
-        result = await response.json();
-      } catch (e) {
-        // Ignore JSON parse error if body isn't JSON
+        const directResponse = await fetch(`${targetBaseUrl}/api/usage/token/`, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+        
+        const directData = await directResponse.json().catch(() => null);
+        if (directResponse.ok && directData && (directData.success || directData.data)) {
+          result = directData;
+          querySuccess = true;
+        } else if (!directResponse.ok && directData && (directData.message || directData.error?.message)) {
+          const errMsg = directData.message || directData.error?.message;
+          throw new Error(errMsg);
+        }
+      } catch (directErr: any) {
+        if (directErr.message && !directErr.message.includes('fetch') && !directErr.message.includes('Network') && !directErr.message.includes('Failed to')) {
+          throw directErr;
+        }
+        console.warn(`Direct balance query to ${targetBaseUrl} failed, falling back to proxy:`, directErr);
       }
 
-      if (!response.ok) {
-        const errMsg = result?.error?.message || result?.message || `请求失败 (HTTP ${response.status})`;
-        throw new Error(errMsg);
+      // 2. If direct fetch didn't succeed (e.g. CORS restrictions on default provider), use proxy with explicit baseUrl
+      if (!querySuccess) {
+        const proxyUrl = `/api/balance?provider=${provider}&baseUrl=${encodeURIComponent(targetBaseUrl)}`;
+        const response = await fetch(proxyUrl, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+
+        let proxyData: any;
+        try {
+          proxyData = await response.json();
+        } catch (e) {
+          // Ignore
+        }
+
+        if (!response.ok) {
+          const errMsg = proxyData?.error?.message || proxyData?.message || `请求失败 (HTTP ${response.status})`;
+          throw new Error(errMsg);
+        }
+        result = proxyData;
       }
 
-      if (result && result.success && result.data) {
+      if (result && (result.success !== false) && result.data) {
         setBalanceCheck({
           isLoading: false,
           error: null,
@@ -506,14 +565,15 @@ const App: React.FC = () => {
           totalGranted: result.data.total_granted,
           userName: result.data.name || 'Token',
           keyQueried: keyType,
-          providerQueried: provider
+          providerQueried: provider,
+          baseUrlQueried: targetBaseUrl
         });
       } else {
         const errMsg = result?.error?.message || result?.message || '查询失败，可能是无效密钥或接口出错';
         throw new Error(errMsg);
       }
     } catch (error: any) {
-      console.error(error);
+      console.error('Balance query error:', error);
       setBalanceCheck({
         isLoading: false,
         error: error.message || '网络错误，请稍后重试',
@@ -523,7 +583,8 @@ const App: React.FC = () => {
         totalGranted: null,
         userName: null,
         keyQueried: keyType,
-        providerQueried: provider
+        providerQueried: provider,
+        baseUrlQueried: targetBaseUrl
       });
     }
   };
@@ -533,11 +594,13 @@ const App: React.FC = () => {
     localStorage.setItem('customApiProvider', customApiProvider);
     localStorage.setItem('defaultApiKey', defaultApiKey);
     localStorage.setItem('itushengApiKey', itushengApiKey);
+    localStorage.setItem('itushengBaseUrl', itushengBaseUrl);
+    localStorage.setItem('defaultBaseUrl', defaultBaseUrl);
     // Keep customApiKey and customBaseUrl in sync for backward compatibility
     localStorage.setItem('customApiKey', activeCustomApiKey);
     localStorage.setItem('customBaseUrl', customBaseUrl);
     localStorage.setItem('gptApiKey', gptApiKey);
-  }, [useCustomApi, customApiProvider, defaultApiKey, itushengApiKey, activeCustomApiKey, customBaseUrl, gptApiKey]);
+  }, [useCustomApi, customApiProvider, defaultApiKey, itushengApiKey, itushengBaseUrl, defaultBaseUrl, activeCustomApiKey, customBaseUrl, gptApiKey]);
 
   useEffect(() => {
     if (!process.env.API_KEY && !useCustomApi) {
@@ -1539,7 +1602,9 @@ const App: React.FC = () => {
                 const imageUrl = await generateTextToImage(
                   textToImagePrompt,
                   commonApiConfig,
-                  textToImageRefImage ? { base64: textToImageRefImage.base64, mimeType: textToImageRefImage.mimeType } : undefined
+                  textToImageRefImages.length > 0 
+                    ? textToImageRefImages.map(img => ({ base64: img.base64, mimeType: img.mimeType })) 
+                    : undefined
                 );
 
                 setTextToImageResults(prev => prev.map(r => 
@@ -1599,7 +1664,9 @@ const App: React.FC = () => {
       const imageUrl = await generateTextToImage(
         textToImagePrompt,
         commonApiConfig,
-        textToImageRefImage ? { base64: textToImageRefImage.base64, mimeType: textToImageRefImage.mimeType } : undefined
+        textToImageRefImages.length > 0 
+          ? textToImageRefImages.map(img => ({ base64: img.base64, mimeType: img.mimeType })) 
+          : undefined
       );
 
       setTextToImageResults(prev => prev.map(r => 
@@ -2128,10 +2195,15 @@ const App: React.FC = () => {
 
                 {/* 悬浮余额详情 */}
                 {balanceCheck.keyQueried === 'custom' && (balanceCheck.success || balanceCheck.error) && (
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-xl p-3 shadow-xl z-50 opacity-0 group-hover/balance:opacity-100 transition-opacity duration-200 pointer-events-none">
-                    <div className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-1.5">
-                      额度账单详情 ({balanceCheck.providerQueried === 'itusheng' ? '爱图生' : '默认地址'})
+                  <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-slate-200 rounded-xl p-3 shadow-xl z-50 opacity-0 group-hover/balance:opacity-100 transition-opacity duration-200 pointer-events-none">
+                    <div className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-1 flex justify-between items-center">
+                      <span>额度账单详情 ({balanceCheck.providerQueried === 'itusheng' ? '爱图生' : '默认地址'})</span>
                     </div>
+                    {balanceCheck.baseUrlQueried && (
+                      <div className="text-[10px] text-indigo-600 font-mono truncate mb-2 pb-1 border-b border-slate-100">
+                        查询节点: {balanceCheck.baseUrlQueried}
+                      </div>
+                    )}
                     {balanceCheck.success && balanceCheck.totalAvailable !== null && (
                       <div className="space-y-1.5 text-[11px] text-slate-600 font-medium">
                         <div className="flex justify-between">
@@ -2332,6 +2404,31 @@ const App: React.FC = () => {
                         <div className="space-y-1.5">
                           <div className="flex justify-between items-center">
                             <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                              <Globe size={14} className="text-indigo-500" /> 爱图生 Base URL (接口与余额查询)
+                            </label>
+                            {itushengBaseUrl !== 'https://www.itusheng.xyz' && (
+                              <button
+                                type="button"
+                                onClick={() => setItushengBaseUrl('https://www.itusheng.xyz')}
+                                className="text-[10px] text-indigo-600 hover:underline"
+                              >
+                                恢复默认
+                              </button>
+                            )}
+                          </div>
+                          <input 
+                            type="text"
+                            value={itushengBaseUrl}
+                            onChange={(e) => setItushengBaseUrl(e.target.value)}
+                            placeholder="https://www.itusheng.xyz"
+                            className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-xs font-mono"
+                          />
+                          <p className="text-[11px] text-slate-400">切换至爱图生时，生图接口和查询余额都将统一请求此 Base URL。</p>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
                               <Key size={14} className="text-indigo-500" /> 爱图生 API Key
                             </label>
                             <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full font-medium">爱图生专用</span>
@@ -2346,7 +2443,7 @@ const App: React.FC = () => {
                           <div className="flex items-center justify-between text-[11px] text-slate-400">
                             <span>该密钥仅用于爱图生接口节点，已与默认节点隔离存储。</span>
                             <a
-                              href="https://www.itusheng.xyz"
+                              href={itushengBaseUrl || "https://www.itusheng.xyz"}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-indigo-600 hover:text-indigo-800 underline flex items-center gap-0.5 shrink-0 ml-1"
@@ -2354,6 +2451,22 @@ const App: React.FC = () => {
                               获取密钥 <ExternalLink size={10} />
                             </a>
                           </div>
+                        </div>
+
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (itushengApiKey) {
+                                checkKeyUsage(itushengApiKey, 'custom', 'itusheng', itushengBaseUrl);
+                              }
+                            }}
+                            disabled={!itushengApiKey || balanceCheck.isLoading}
+                            className="w-full py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                          >
+                            <RefreshCw size={12} className={balanceCheck.isLoading ? "animate-spin" : ""} />
+                            <span>查询爱图生余额额度</span>
+                          </button>
                         </div>
                       </div>
                     )}
@@ -2383,9 +2496,15 @@ const App: React.FC = () => {
                       {balanceCheck.isLoading && <RefreshCw size={12} className="animate-spin text-blue-500" />}
                     </div>
 
+                    {balanceCheck.baseUrlQueried && (
+                      <div className="text-[11px] text-slate-500 font-mono truncate bg-white px-2 py-1 rounded border border-slate-200/70">
+                        查询 Base URL: <span className="font-semibold text-indigo-600">{balanceCheck.baseUrlQueried}</span>
+                      </div>
+                    )}
+
                     {balanceCheck.isLoading && (
                       <div className="text-sm text-slate-500 py-1 flex items-center gap-2">
-                        正在查询额度使用情况...
+                        正在向 {balanceCheck.baseUrlQueried || (customApiProvider === 'itusheng' ? '爱图生' : '默认地址')} 查询额度使用情况...
                       </div>
                     )}
 
@@ -2807,7 +2926,7 @@ const App: React.FC = () => {
                             <option value="gemini-3-pro-image-preview">Nano Banana Pro (高清/Pro)</option>
                             <option value="gemini-3.1-flash-image-preview">Nano Banana 2 (Flash Preview)</option>
                             <option value="gemini-nano-banana-2.1-preview">Nano Banana 2.1 (Preview)</option>
-                            <option value="gpt-image-2">GPT Image 2 (专用)</option>
+                            {/* <option value="gpt-image-2">GPT Image 2 (专用)</option> (暂时隐藏) */}
                         </select>
                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
                             <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
@@ -4643,18 +4762,32 @@ const App: React.FC = () => {
                                             </div>
 
                                             <div>
-                                                <label className="block text-sm font-bold text-slate-700 mb-2">参考图 (可选)</label>
-                                                <ImageUploader 
-                                                    onImageSelected={setTextToImageRefImage} 
-                                                    currentImage={textToImageRefImage}
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <label className="block text-sm font-bold text-slate-700">参考图 (可选，最多5张)</label>
+                                                    {textToImageRefImages.length > 0 && (
+                                                        <span className="text-xs text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded-full">
+                                                            已上传 {textToImageRefImages.length} / 5 张
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <BatchImageUploader 
+                                                    onImagesSelected={setTextToImageRefImages} 
+                                                    currentImages={textToImageRefImages}
+                                                    maxImages={5}
+                                                    title="点击或拖拽上传参考图"
+                                                    subtitle="支持多选上传最多5张图片"
                                                 />
-                                                {textToImageRefImage && (
-                                                    <button 
-                                                        onClick={() => setTextToImageRefImage(null)}
-                                                        className="mt-2 text-xs text-red-500 hover:underline flex items-center gap-1"
-                                                    >
-                                                        <X size={12} /> 移除参考图
-                                                    </button>
+                                                {textToImageRefImages.length > 0 && (
+                                                    <div className="mt-2 flex justify-between items-center text-xs">
+                                                        <span className="text-slate-400">AI 将综合多张参考图生成</span>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => setTextToImageRefImages([])}
+                                                            className="text-red-500 hover:underline flex items-center gap-1 font-medium"
+                                                        >
+                                                            <X size={12} /> 清空全部参考图
+                                                        </button>
+                                                    </div>
                                                 )}
                                             </div>
 

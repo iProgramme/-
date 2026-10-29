@@ -474,19 +474,23 @@ export const generateTextToImage = async (
     imageSize?: '1K' | '2K' | '4K';
     aspectRatio?: string;
   },
-  referenceImage?: { base64: string, mimeType: string }
+  referenceImage?: { base64: string, mimeType: string } | Array<{ base64: string, mimeType: string }>
 ): Promise<string> => {
   const { useCustomApi, customBaseUrl, customApiKey, gptApiKey, model, imageSize, aspectRatio } = config;
   
+  const refImgList: Array<{ base64: string, mimeType: string }> = Array.isArray(referenceImage)
+    ? referenceImage
+    : (referenceImage ? [referenceImage] : []);
+
   if (model === 'gpt-image-2') {
     if (!gptApiKey) {
       throw new Error("gpt-image-2 API Key 缺失。请在设置中输入。");
     }
 
     let response;
-    if (referenceImage) {
+    if (refImgList.length > 0) {
       const formData = new FormData();
-      formData.append("image", base64ToBlob(referenceImage.base64, referenceImage.mimeType), "ref.png");
+      formData.append("image", base64ToBlob(refImgList[0].base64, refImgList[0].mimeType), "ref.png");
       formData.append("prompt", prompt);
       formData.append("model", "gpt-image-2");
       formData.append("n", "1");
@@ -545,11 +549,11 @@ export const generateTextToImage = async (
   try {
     const parts: any[] = [];
     
-    if (referenceImage) {
+    for (const ref of refImgList) {
       parts.push({
         inlineData: {
-          data: referenceImage.base64,
-          mimeType: referenceImage.mimeType,
+          data: ref.base64,
+          mimeType: ref.mimeType,
         },
       });
     }
