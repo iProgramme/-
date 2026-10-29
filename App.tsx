@@ -383,10 +383,31 @@ const App: React.FC = () => {
     return localStorage.getItem('useCustomApi') === 'true';
   });
   
+  // 默认地址下线截止时间：2026年11月15日23:59:59.999
+  // 每次用户在前端打开应用时实时校验当前时间
+  const checkIsDefaultAddressExpired = (): boolean => {
+    const now = new Date();
+    const deadline = new Date(2026, 10, 15, 23, 59, 59, 999); // 2026-11-15 23:59:59.999 (月份 10 表示 11 月)
+    return now.getTime() > deadline.getTime();
+  };
+
+  const isDefaultAddressExpired = checkIsDefaultAddressExpired();
+  // 全局提示横幅显示状态（超过2026年11月15日则不显示，否则每次打开默认显示，支持用户关闭）
+  const [showExpiryBanner, setShowExpiryBanner] = useState(!isDefaultAddressExpired);
+
   // Custom API Provider: 'default' (默认地址) or 'itusheng' (爱图生)
+  // 如果已超过2026年11月15日，强制设置为 'itusheng'，不使用 'default'
   const [customApiProvider, setCustomApiProvider] = useState<'default' | 'itusheng'>(() => {
+    if (isDefaultAddressExpired) return 'itusheng';
     return (localStorage.getItem('customApiProvider') as 'default' | 'itusheng') || 'default';
   });
+
+  // 如果时间超过2026年11月15日，强制纠正并持久化为 'itusheng'
+  useEffect(() => {
+    if (isDefaultAddressExpired && customApiProvider === 'default') {
+      setCustomApiProvider('itusheng');
+    }
+  }, [isDefaultAddressExpired, customApiProvider]);
 
   // Separate keys and base URLs for each provider
   const [defaultApiKey, setDefaultApiKey] = useState(() => {
@@ -2152,6 +2173,44 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 全局下线提示横幅：默认地址将于2026年11月15日下线，提示用户尽快迁移；若当前时间超过2026年11月15日则不展示 */}
+      {!isDefaultAddressExpired && showExpiryBanner && (
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-sm relative z-50 animate-in fade-in duration-300">
+          <div className="max-w-6xl mx-auto px-4 py-2.5 sm:py-2 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs sm:text-sm">
+            <div className="flex items-center gap-2 font-medium">
+              <span className="p-1 bg-white/20 rounded-full flex items-center justify-center shrink-0">
+                <AlertTriangle size={15} className="text-white" />
+              </span>
+              <span>
+                默认地址将于 <strong>2026年11月15日</strong> 下线，请尽快迁移到新的地址使用。
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSettings(true);
+                  setCustomApiProvider('itusheng');
+                }}
+                className="bg-white text-amber-800 hover:bg-amber-50 active:bg-amber-100 font-bold px-3 py-1 rounded-md text-xs shadow-xs transition-all flex items-center gap-1 cursor-pointer"
+              >
+                <span>立即配置新地址</span>
+                <ArrowRight size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowExpiryBanner(false)}
+                className="text-white/80 hover:text-white p-1 rounded hover:bg-white/10 transition-colors cursor-pointer"
+                title="关闭提示"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -2283,59 +2342,91 @@ const App: React.FC = () => {
 
                 {useCustomApi && (
                   <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                    {/* 地址节点选择器：用户可在默认地址与“爱图生”地址之间切换，不显示具体URL */}
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-700 flex items-center justify-between">
-                        <span className="flex items-center gap-1.5">
-                          <Sparkles size={14} className="text-blue-500" /> API 地址服务商
-                        </span>
-                        <span className="text-[11px] text-slate-400 font-normal">
-                          当前生效：{customApiProvider === 'itusheng' ? '爱图生' : '默认地址'}
-                        </span>
-                      </label>
-                      <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomApiProvider('default');
-                            setBalanceCheck(prev => ({ ...prev, keyQueried: '' }));
-                          }}
-                          className={`py-2 px-3 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                            customApiProvider === 'default'
-                              ? 'bg-white text-blue-600 shadow-sm font-bold'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          <span className={`w-2 h-2 rounded-full ${customApiProvider === 'default' ? 'bg-blue-600' : 'bg-slate-300'}`} />
-                          默认地址
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomApiProvider('itusheng');
-                            setBalanceCheck(prev => ({ ...prev, keyQueried: '' }));
-                          }}
-                          className={`py-2 px-3 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                            customApiProvider === 'itusheng'
-                              ? 'bg-white text-indigo-600 shadow-sm font-bold'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          <span className={`w-2 h-2 rounded-full ${customApiProvider === 'itusheng' ? 'bg-indigo-600' : 'bg-slate-300'}`} />
-                          <span>爱图生</span>
-                          <span className="text-[10px] font-normal text-slate-400">itusheng.xyz</span>
-                        </button>
+                    {/* 地址节点选择器：若超过2026年11月15日则不显示默认地址，仅显示爱图生 */}
+                    {!isDefaultAddressExpired ? (
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <Sparkles size={14} className="text-blue-500" /> API 地址服务商
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-normal">
+                            当前生效：{customApiProvider === 'itusheng' ? '爱图生' : '默认地址'}
+                          </span>
+                        </label>
+                        <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomApiProvider('default');
+                              setBalanceCheck(prev => ({ ...prev, keyQueried: '' }));
+                            }}
+                            className={`py-2 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                              customApiProvider === 'default'
+                                ? 'bg-white text-blue-600 shadow-sm font-bold'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            <span className={`w-2 h-2 rounded-full ${customApiProvider === 'default' ? 'bg-blue-600' : 'bg-slate-300'}`} />
+                            <span>默认地址</span>
+                            <span className="text-[9px] bg-amber-100 text-amber-700 font-medium px-1.5 py-0.5 rounded leading-none">
+                              11/15下线
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomApiProvider('itusheng');
+                              setBalanceCheck(prev => ({ ...prev, keyQueried: '' }));
+                            }}
+                            className={`py-2 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                              customApiProvider === 'itusheng'
+                                ? 'bg-white text-indigo-600 shadow-sm font-bold'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            <span className={`w-2 h-2 rounded-full ${customApiProvider === 'itusheng' ? 'bg-indigo-600' : 'bg-slate-300'}`} />
+                            <span>爱图生</span>
+                            <span className="text-[10px] font-normal text-slate-400">itusheng.xyz</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      /* 超过2026年11月15日：配置中心完全隐藏默认地址，仅展示爱图生节点 */
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <Sparkles size={14} className="text-indigo-500" /> API 地址服务商
+                          </span>
+                          <span className="text-[11px] text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">
+                            爱图生节点生效中
+                          </span>
+                        </label>
+                        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-150 p-2.5 rounded-xl flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
+                            <span className="font-bold text-xs text-indigo-950">爱图生 (itusheng.xyz)</span>
+                          </div>
+                          <span className="text-[11px] text-indigo-600 font-medium">推荐接入节点</span>
+                        </div>
+                      </div>
+                    )}
 
-                    {/* 分别输入两个节点的 Key */}
-                    {customApiProvider === 'default' ? (
-                      <div className="space-y-1.5 animate-in fade-in duration-200">
+                    {/* 分别输入节点的 Key：若超过2026年11月15日，只显示爱图生配置 */}
+                    {customApiProvider === 'default' && !isDefaultAddressExpired ? (
+                      <div className="space-y-2.5 animate-in fade-in duration-200">
+                        {/* 默认地址下线临期提醒卡片 */}
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-start gap-2 text-xs text-amber-800">
+                          <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                          <div className="leading-relaxed">
+                            <span className="font-bold">下线提醒：</span>默认地址将于 <strong className="text-amber-900">2026年11月15日</strong> 下线，请尽快切换至上方「爱图生」节点使用。
+                          </div>
+                        </div>
+
                         <div className="flex justify-between items-center">
                           <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
                             <Key size={14} className="text-blue-500" /> 默认地址 API Key
                           </label>
-                          <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-medium">默认渠道</span>
+                          <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full font-medium">即将下线</span>
                         </div>
                         <input 
                           type="password"
