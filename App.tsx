@@ -352,6 +352,7 @@ const App: React.FC = () => {
   const [poseTransferBackground, setPoseTransferBackground] = useState<boolean>(false);
   const [poseTransferHairStyle, setPoseTransferHairStyle] = useState<boolean>(false);
   const [poseTransferFace, setPoseTransferFace] = useState<boolean>(false);
+  const [poseTransferMatchMode, setPoseTransferMatchMode] = useState<'all' | 'random'>('all'); // 'all': 全量组合(1底图×5参考=5张), 'random': 1对1随机
   const [poseTransferResults, setPoseTransferResults] = useState<{
     id: string;
     baseIndex: number;
@@ -1423,20 +1424,47 @@ const App: React.FC = () => {
   const handlePoseTransferGeneration = async () => {
     if (poseTransferBaseImages.length === 0 || poseTransferRefImages.length === 0) return;
 
-    const newResults = poseTransferBaseImages.map((_, baseIdx) => {
-      const randomPoseIdx = Math.floor(Math.random() * poseTransferRefImages.length);
-      const id = `pose-transfer-${Date.now()}-${baseIdx}`;
-      return {
-        id,
-        baseIndex: baseIdx,
-        poseIndex: randomPoseIdx,
-        result: {
+    const newResults: {
+      id: string;
+      baseIndex: number;
+      poseIndex: number;
+      result: GenerationResult;
+    }[] = [];
+
+    if (poseTransferMatchMode === 'all') {
+      // 全量组合匹配：每张底图分别应用每一张参考图 (1底图 × 5参考图 = 5张出图)
+      poseTransferBaseImages.forEach((_, baseIdx) => {
+        poseTransferRefImages.forEach((_, refIdx) => {
+          const id = `pose-transfer-${Date.now()}-${baseIdx}-${refIdx}`;
+          newResults.push({
+            id,
+            baseIndex: baseIdx,
+            poseIndex: refIdx,
+            result: {
+              id,
+              poseId: 'pose-transfer',
+              status: 'loading' as const
+            }
+          });
+        });
+      });
+    } else {
+      // 随机1对1匹配
+      poseTransferBaseImages.forEach((_, baseIdx) => {
+        const randomPoseIdx = Math.floor(Math.random() * poseTransferRefImages.length);
+        const id = `pose-transfer-${Date.now()}-${baseIdx}`;
+        newResults.push({
           id,
-          poseId: 'pose-transfer',
-          status: 'loading' as const
-        }
-      };
-    });
+          baseIndex: baseIdx,
+          poseIndex: randomPoseIdx,
+          result: {
+            id,
+            poseId: 'pose-transfer',
+            status: 'loading' as const
+          }
+        });
+      });
+    }
 
     setPoseTransferResults(newResults);
     setIsProcessing(true);
@@ -1587,6 +1615,30 @@ const App: React.FC = () => {
     
     if (downloadData.length === 0) return;
     await downloadResultsAsZip(downloadData, 'pose_transfer_results');
+  };
+
+  const retryAllFailedPoseTransfer = async () => {
+    const failedItems = poseTransferResults.filter(r => r.result.status === 'error');
+    if (failedItems.length === 0) return;
+
+    setIsProcessing(true);
+    setProgressCount(0);
+    setProgressTotal(failedItems.length);
+    try {
+      const chunkSize = 20;
+      for (let i = 0; i < failedItems.length; i += chunkSize) {
+        const chunk = failedItems.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async (item) => {
+          try {
+            await handleRegeneratePoseTransferItem(item.id);
+          } finally {
+            setProgressCount(prev => prev + 1);
+          }
+        }));
+      }
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // --- Text to Image Handlers ---
@@ -4493,12 +4545,80 @@ const App: React.FC = () => {
                         </div>
                     </div>
 
+                    {/* Matching Strategy / Mode */}
+                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 max-w-4xl mx-auto space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                            <label className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                <Sparkles size={16} className="text-teal-600" />
+                                批量匹配出图策略：
+                            </label>
+                            <span className="text-xs text-slate-500 font-medium">
+                                当前已选：<strong className="text-slate-800">{poseTransferBaseImages.length}</strong> 张底图，<strong className="text-slate-800">{poseTransferRefImages.length}</strong> 张参考图
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setPoseTransferMatchMode('all')}
+                                className={`p-3.5 rounded-xl border text-left transition-all flex items-start gap-3 cursor-pointer ${
+                                    poseTransferMatchMode === 'all'
+                                        ? 'bg-teal-50/70 border-teal-500 ring-2 ring-teal-500/20 shadow-xs'
+                                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                }`}
+                            >
+                                <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 shrink-0 ${
+                                    poseTransferMatchMode === 'all' ? 'border-teal-600 bg-teal-600' : 'border-slate-300'
+                                }`}>
+                                    {poseTransferMatchMode === 'all' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-xs font-bold text-slate-800">全量组合匹配 (推荐)</span>
+                                        <span className="text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.2 rounded font-semibold">
+                                            共 {poseTransferBaseImages.length > 0 && poseTransferRefImages.length > 0 ? poseTransferBaseImages.length * poseTransferRefImages.length : 0} 张
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                                        每张底图分别应用每一张参考图。例如：<strong>1张底图A + 5张参考图 ➔ 自动生成 5 张结果</strong>，每张参考图的姿势/服装均会被完整迁移！
+                                    </p>
+                                </div>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setPoseTransferMatchMode('random')}
+                                className={`p-3.5 rounded-xl border text-left transition-all flex items-start gap-3 cursor-pointer ${
+                                    poseTransferMatchMode === 'random'
+                                        ? 'bg-teal-50/70 border-teal-500 ring-2 ring-teal-500/20 shadow-xs'
+                                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                }`}
+                            >
+                                <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 shrink-0 ${
+                                    poseTransferMatchMode === 'random' ? 'border-teal-600 bg-teal-600' : 'border-slate-300'
+                                }`}>
+                                    {poseTransferMatchMode === 'random' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-xs font-bold text-slate-800">一对一随机匹配</span>
+                                        <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-semibold">
+                                            共 {poseTransferBaseImages.length} 张
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                                        每张底图仅随机配对1张参考图。生成张数等于底图数。
+                                    </p>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+
                     <div className="flex justify-center pt-4">
                         <Button 
                             onClick={handlePoseTransferGeneration} 
                             disabled={isProcessing || poseTransferBaseImages.length === 0 || poseTransferRefImages.length === 0}
                             size="lg"
-                            className="px-12 py-4 text-lg bg-teal-600 hover:bg-teal-700 shadow-teal-200"
+                            className="px-12 py-4 text-lg bg-teal-600 hover:bg-teal-700 shadow-teal-200 cursor-pointer"
                         >
                             {isProcessing ? (
                                 <>
@@ -4508,7 +4628,13 @@ const App: React.FC = () => {
                             ) : (
                                 <>
                                     <Sparkles className="mr-2" size={24} />
-                                    一键生成迁移结果 ({poseTransferBaseImages.length}张底图，随机匹配参考图)
+                                    {poseTransferBaseImages.length === 0 || poseTransferRefImages.length === 0 ? (
+                                        "请先上传底图与参考图"
+                                    ) : poseTransferMatchMode === 'all' ? (
+                                        `一键生成迁移结果 (共 ${poseTransferBaseImages.length * poseTransferRefImages.length} 张：${poseTransferBaseImages.length}张底图 × ${poseTransferRefImages.length}张参考图)`
+                                    ) : (
+                                        `一键生成迁移结果 (共 ${poseTransferBaseImages.length} 张底图，随机配对参考图)`
+                                    )}
                                 </>
                             )}
                         </Button>
@@ -4519,16 +4645,28 @@ const App: React.FC = () => {
                          <div className="space-y-6">
                             <div className="flex items-center justify-between px-4">
                                 <h3 className="text-xl font-bold text-slate-800">生成结果列表</h3>
-                                <Button 
-                                    onClick={downloadAllPoseTransferResults}
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={!poseTransferResults.some(r => r.result.status === 'success')}
-                                    className="flex items-center gap-2"
-                                >
-                                    <Download size={16} />
-                                    一键下载全部 (ZIP)
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    {poseTransferResults.some(r => r.result.status === 'error') && (
+                                        <button 
+                                            onClick={retryAllFailedPoseTransfer}
+                                            disabled={isProcessing}
+                                            className="flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 transition-colors text-xs disabled:opacity-50 cursor-pointer"
+                                        >
+                                            <RefreshCw size={14} className={isProcessing ? 'animate-spin' : ''} />
+                                            一键失败重试
+                                        </button>
+                                    )}
+                                    <Button 
+                                        onClick={downloadAllPoseTransferResults}
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={!poseTransferResults.some(r => r.result.status === 'success')}
+                                        className="flex items-center gap-2 cursor-pointer"
+                                    >
+                                        <Download size={16} />
+                                        一键下载全部 (ZIP)
+                                    </Button>
+                                </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
                                 {poseTransferResults.map((item) => {
@@ -4540,12 +4678,12 @@ const App: React.FC = () => {
                                         <div key={item.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col">
                                             <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                                                 <span className="font-medium text-slate-600 text-sm">
-                                                    底图 #{item.baseIndex + 1} ➔ 姿势 #{item.poseIndex + 1}
+                                                    底图 #{item.baseIndex + 1} ➔ 参考图 #{item.poseIndex + 1}
                                                 </span>
                                                 <button 
                                                     onClick={() => handleRegeneratePoseTransferItem(item.id)}
                                                     disabled={result.status === 'loading'}
-                                                    className="text-slate-400 hover:text-teal-600 disabled:opacity-50 transition-colors flex items-center gap-1 text-xs"
+                                                    className="text-slate-400 hover:text-teal-600 disabled:opacity-50 transition-colors flex items-center gap-1 text-xs cursor-pointer"
                                                 >
                                                     <RefreshCw size={14} className={result.status === 'loading' ? 'animate-spin' : ''} />
                                                     重新生成
@@ -4569,10 +4707,10 @@ const App: React.FC = () => {
                                                             <img 
                                                                 src={`data:${refImg.mimeType};base64,${refImg.base64}`} 
                                                                 className="w-full h-full object-cover opacity-80" 
-                                                                alt="Reference Pose" 
+                                                                alt="Reference" 
                                                             />
                                                         )}
-                                                        <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">姿势 #{item.poseIndex + 1}</div>
+                                                        <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 rounded">参考图 #{item.poseIndex + 1}</div>
                                                     </div>
                                                 </div>
 
