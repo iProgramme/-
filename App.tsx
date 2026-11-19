@@ -114,9 +114,119 @@ const buildTryOnPrompt = (options: {
   hasStockingImage?: boolean;
   stockingPreset?: { id: string; label: string; prompt: string };
   removeShoes?: boolean;
+  useDefaultPose?: boolean;
   variationIndex?: number;
 }): string => {
-  const { mode, clothingPrompt, hasStockingImage, stockingPreset, removeShoes = true, variationIndex = 1 } = options;
+  const { mode, clothingPrompt, hasStockingImage, stockingPreset, removeShoes = true, useDefaultPose = true, variationIndex = 1 } = options;
+
+  if (!useDefaultPose) {
+    let keepPoseFootwear = '';
+    if (removeShoes) {
+      if (hasStockingImage || stockingPreset) {
+        keepPoseFootwear = '5. FOOTWEAR MODIFICATION (去除鞋子/赤足): The model must NOT wear high heels or shoes. Remove any shoes/heels and render the model barefoot (wearing only the stockings without shoes), while keeping the exact original leg and foot posture from the model image.';
+      } else {
+        keepPoseFootwear = '4. FOOTWEAR MODIFICATION (去除鞋子/赤足): The model must NOT wear high heels or shoes. Remove any shoes/heels and render the model barefoot, while keeping the exact original leg and foot posture from the model image.';
+      }
+    } else {
+      const shoeStepNum = (hasStockingImage || stockingPreset) ? '5' : '4';
+      if (mode === 'image') {
+        keepPoseFootwear = `${shoeStepNum}. FOOTWEAR & SHOES (保留鞋袜): If the uploaded clothing/outfit image (Input 1) contains shoes, footwear, heels, sneakers, boots, or socks, adopt them onto the model while preserving the model's original leg and foot pose. Otherwise, keep or render matching stylish shoes and socks naturally without changing the pose.`;
+      } else {
+        keepPoseFootwear = `${shoeStepNum}. FOOTWEAR & SHOES (搭配鞋袜): Render complete matching footwear/shoes and socks that complement the outfit seamlessly without changing the model's original leg or foot pose.`;
+      }
+    }
+
+    if (mode === 'image') {
+      if (hasStockingImage) {
+        return `You are an expert AI fashion stylist and virtual try-on editor.
+
+Input 1: An image of a clothing product (garment).
+Input 2: An image of a model in a scene.
+Input 3: An image of stockings/hosiery.
+
+Task:
+1. Generate a photorealistic image of the EXACT same model from Input 2 wearing the clothing from Input 1 AND the stockings from Input 3.
+2. The clothing from Input 1 must completely replace the model's original outfit.
+3. The stockings from Input 3 must be worn on the model's legs.
+4. CRITICAL POSE & IDENTITY PRESERVATION (严禁改变姿势): STRICTLY keep the model's EXACT original pose, body posture, arm/hand positions, leg positions, head angle, facial features/identity, and hairstyle from Input 2 completely unchanged. Do NOT change the pose, do NOT add a smartphone or mirror selfie pose unless already present in Input 2, and do NOT alter the hairstyle.
+${keepPoseFootwear}
+6. STRICTLY maintain the exact original background, lighting, camera angle, and scene environment from Input 2.
+7. Ensure high fidelity for the clothing and stockings texture and natural fit to the model's original posture.`;
+      } else if (stockingPreset) {
+        return `You are an expert AI fashion stylist and virtual try-on editor.
+
+Input 1: An image of a clothing product (garment).
+Input 2: An image of a model in a scene.
+
+Task:
+1. Generate a photorealistic image of the EXACT same model from Input 2 wearing the clothing from Input 1 AND wearing specific stockings/hosiery: ${stockingPreset.prompt}.
+2. The clothing from Input 1 must completely replace the model's original outfit.
+3. The model's legs MUST be dressed in the stockings: "${stockingPreset.prompt}". Render this naturally, photorealistically and smoothly.
+4. CRITICAL POSE & IDENTITY PRESERVATION (严禁改变姿势): STRICTLY keep the model's EXACT original pose, body posture, arm/hand positions, leg positions, head angle, facial features/identity, and hairstyle from Input 2 completely unchanged. Do NOT change the pose, do NOT add a smartphone or mirror selfie pose unless already present in Input 2, and do NOT alter the hairstyle.
+${keepPoseFootwear}
+6. STRICTLY maintain the exact original background, lighting, camera angle, and scene environment from Input 2.
+7. Ensure high fidelity for the clothing and stockings texture and natural fit to the model's original posture.`;
+      } else {
+        return `You are an expert AI fashion stylist and virtual try-on editor.
+
+Input 1: An image of a clothing product (garment).
+Input 2: An image of a model in a scene.
+
+Task:
+1. Generate a photorealistic image of the EXACT same model from Input 2 wearing the clothing from Input 1.
+2. The clothing from Input 1 must completely replace the model's original outfit.
+3. CRITICAL POSE & IDENTITY PRESERVATION (严禁改变姿势): STRICTLY keep the model's EXACT original pose, body posture, arm/hand positions, leg positions, head angle, facial features/identity, and hairstyle from Input 2 completely unchanged. Do NOT change the pose, do NOT add a smartphone or mirror selfie pose unless already present in Input 2, and do NOT alter the hairstyle.
+${keepPoseFootwear}
+5. STRICTLY maintain the exact original background, lighting, camera angle, and scene environment from Input 2.
+6. Ensure high fidelity for the clothing texture and natural fit to the model's original posture.`;
+      }
+    } else {
+      const cPrompt = clothingPrompt || 'stylish outfit';
+      if (hasStockingImage) {
+        return `You are an expert AI fashion stylist and virtual try-on editor.
+
+Input 1: An image of a model in a scene.
+Input 2: An image of stockings/hosiery.
+Target Clothing Description: ${cPrompt} (Variation ${variationIndex}).
+
+Task:
+1. Generate a photorealistic image of the EXACT same model from Input 1 wearing the custom outfit described: "${cPrompt}" AND the stockings from Input 2.
+2. The described clothing must completely replace the model's original outfit.
+3. The stockings from Input 2 must be worn on the model's legs.
+4. CRITICAL POSE & IDENTITY PRESERVATION (严禁改变姿势): STRICTLY keep the model's EXACT original pose, body posture, arm/hand positions, leg positions, head angle, facial features/identity, and hairstyle from Input 1 completely unchanged. Do NOT change the pose, do NOT add a smartphone or mirror selfie pose unless already present in Input 1, and do NOT alter the hairstyle.
+${keepPoseFootwear}
+6. STRICTLY maintain the exact original background, lighting, camera angle, and scene environment from Input 1.
+7. Ensure high fidelity for the clothing and stockings texture and natural fit to the model's original posture.`;
+      } else if (stockingPreset) {
+        return `You are an expert AI fashion stylist and virtual try-on editor.
+
+Input 1: An image of a model in a scene.
+Target Clothing Description: ${cPrompt} (Variation ${variationIndex}).
+
+Task:
+1. Generate a photorealistic image of the EXACT same model from Input 1 wearing the custom outfit described: "${cPrompt}" AND wearing specific stockings/hosiery: ${stockingPreset.prompt}.
+2. The described clothing must completely replace the model's original outfit.
+3. The model's legs MUST be dressed in the stockings: "${stockingPreset.prompt}". Render this naturally, photorealistically and smoothly.
+4. CRITICAL POSE & IDENTITY PRESERVATION (严禁改变姿势): STRICTLY keep the model's EXACT original pose, body posture, arm/hand positions, leg positions, head angle, facial features/identity, and hairstyle from Input 1 completely unchanged. Do NOT change the pose, do NOT add a smartphone or mirror selfie pose unless already present in Input 1, and do NOT alter the hairstyle.
+${keepPoseFootwear}
+6. STRICTLY maintain the exact original background, lighting, camera angle, and scene environment from Input 1.
+7. Ensure high fidelity for the clothing and stockings texture and natural fit to the model's original posture.`;
+      } else {
+        return `You are an expert AI fashion stylist and virtual try-on editor.
+
+Input 1: An image of a model in a scene.
+Target Clothing Description: ${cPrompt} (Variation ${variationIndex}).
+
+Task:
+1. Generate a photorealistic image of the EXACT same model from Input 1 wearing the custom outfit described above: "${cPrompt}".
+2. The described clothing must completely replace the model's original outfit.
+3. CRITICAL POSE & IDENTITY PRESERVATION (严禁改变姿势): STRICTLY keep the model's EXACT original pose, body posture, arm/hand positions, leg positions, head angle, facial features/identity, and hairstyle from Input 1 completely unchanged. Do NOT change the pose, do NOT add a smartphone or mirror selfie pose unless already present in Input 1, and do NOT alter the hairstyle.
+${keepPoseFootwear}
+5. STRICTLY maintain the exact original background, lighting, camera angle, and scene environment from Input 1.
+6. Ensure high fidelity for the clothing texture and natural fit to the model's original posture.`;
+      }
+    }
+  }
 
   let footwearInstruction = '';
   if (removeShoes) {
@@ -338,11 +448,12 @@ const App: React.FC = () => {
   const [tryOnClothingPrompt, setTryOnClothingPrompt] = useState<string>('中国风、吊带、超短、某款式，旗袍（超短款式，紧身，开叉设计）');
   const [tryOnPromptCount, setTryOnPromptCount] = useState<number>(4);
   const [tryOnRemoveShoes, setTryOnRemoveShoes] = useState<boolean>(true);
+  const [tryOnUseDefaultPose, setTryOnUseDefaultPose] = useState<boolean>(true);
   const [tryOnStockingImages, setTryOnStockingImages] = useState<UploadedImage[]>([]);
   const [tryOnStockingSource, setTryOnStockingSource] = useState<'upload' | 'preset'>('upload');
   const [selectedPresetStockings, setSelectedPresetStockings] = useState<string[]>([]);
   const [tryOnStockingMatchStrategy, setTryOnStockingMatchStrategy] = useState<'random' | 'force'>('random');
-  const [tryOnResults, setTryOnResults] = useState<{sourceIndex: number, clothingMode?: 'image' | 'prompt', clothingPrompt?: string, removeShoes?: boolean, result: GenerationResult, stockingIndex?: number, stockingPreset?: string}[]>([]);
+  const [tryOnResults, setTryOnResults] = useState<{sourceIndex: number, clothingMode?: 'image' | 'prompt', clothingPrompt?: string, removeShoes?: boolean, useDefaultPose?: boolean, result: GenerationResult, stockingIndex?: number, stockingPreset?: string}[]>([]);
 
   // Element / Pose Transfer State
   const [poseTransferBaseImages, setPoseTransferBaseImages] = useState<UploadedImage[]>([]);
@@ -1796,6 +1907,16 @@ const App: React.FC = () => {
   const handleTryOnGeneration = async () => {
     if (!tryOnModelImage) return;
 
+    let modelAspectRatio: string | undefined = undefined;
+    if (!tryOnUseDefaultPose) {
+      try {
+        const dims = await getImageDimensions(tryOnModelImage.base64, tryOnModelImage.mimeType);
+        modelAspectRatio = getClosestAspectRatio(dims.width, dims.height);
+      } catch (e) {
+        modelAspectRatio = undefined;
+      }
+    }
+
     if (tryOnClothingMode === 'image') {
       if (tryOnClothingImages.length === 0) return;
 
@@ -1835,6 +1956,7 @@ const App: React.FC = () => {
           sourceIndex: index,
           clothingMode: 'image' as const,
           removeShoes: tryOnRemoveShoes,
+          useDefaultPose: tryOnUseDefaultPose,
           stockingIndex: stockingIndex,
           stockingPreset: stockingPreset,
           result: {
@@ -1865,12 +1987,14 @@ const App: React.FC = () => {
                   const clothingImg = tryOnClothingImages[item.sourceIndex];
                   const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
                   const activePreset = item.stockingPreset ? STOCKING_PRESETS.find(p => p.id === item.stockingPreset) : undefined;
+                  const useDefaultPose = item.useDefaultPose !== undefined ? item.useDefaultPose : tryOnUseDefaultPose;
                   
                   const prompt = buildTryOnPrompt({
                     mode: 'image',
                     hasStockingImage: !!stockingImg,
                     stockingPreset: activePreset,
-                    removeShoes: item.removeShoes !== undefined ? item.removeShoes : tryOnRemoveShoes
+                    removeShoes: item.removeShoes !== undefined ? item.removeShoes : tryOnRemoveShoes,
+                    useDefaultPose
                   });
 
                   const imageUrl = await generateTryOn(
@@ -1879,7 +2003,7 @@ const App: React.FC = () => {
                     clothingImg.base64,
                     clothingImg.mimeType,
                     prompt,
-                    commonApiConfig,
+                    useDefaultPose ? commonApiConfig : { ...commonApiConfig, aspectRatio: modelAspectRatio },
                     stockingImg?.base64,
                     stockingImg?.mimeType
                   );
@@ -1966,6 +2090,7 @@ const App: React.FC = () => {
           clothingMode: 'prompt' as const,
           clothingPrompt: tryOnClothingPrompt.trim(),
           removeShoes: tryOnRemoveShoes,
+          useDefaultPose: tryOnUseDefaultPose,
           stockingIndex: stockingIndex,
           stockingPreset: stockingPreset,
           result: {
@@ -1995,6 +2120,7 @@ const App: React.FC = () => {
                 try {
                   const stockingImg = item.stockingIndex !== undefined ? tryOnStockingImages[item.stockingIndex] : undefined;
                   const activePreset = item.stockingPreset ? STOCKING_PRESETS.find(p => p.id === item.stockingPreset) : undefined;
+                  const useDefaultPose = item.useDefaultPose !== undefined ? item.useDefaultPose : tryOnUseDefaultPose;
                   
                   const prompt = buildTryOnPrompt({
                     mode: 'prompt',
@@ -2002,6 +2128,7 @@ const App: React.FC = () => {
                     hasStockingImage: !!stockingImg,
                     stockingPreset: activePreset,
                     removeShoes: item.removeShoes !== undefined ? item.removeShoes : tryOnRemoveShoes,
+                    useDefaultPose,
                     variationIndex: item.sourceIndex + 1
                   });
 
@@ -2011,7 +2138,7 @@ const App: React.FC = () => {
                     null,
                     null,
                     prompt,
-                    commonApiConfig,
+                    useDefaultPose ? commonApiConfig : { ...commonApiConfig, aspectRatio: modelAspectRatio },
                     stockingImg?.base64,
                     stockingImg?.mimeType
                   );
@@ -2149,6 +2276,17 @@ const App: React.FC = () => {
       const stockingImg = stockingIndex !== undefined ? tryOnStockingImages[stockingIndex] : undefined;
       const activePreset = stockingPreset ? STOCKING_PRESETS.find(p => p.id === stockingPreset) : undefined;
       const removeShoes = currentResultItem?.removeShoes !== undefined ? currentResultItem.removeShoes : tryOnRemoveShoes;
+      const useDefaultPose = currentResultItem?.useDefaultPose !== undefined ? currentResultItem.useDefaultPose : tryOnUseDefaultPose;
+
+      let modelAspectRatio: string | undefined = undefined;
+      if (!useDefaultPose) {
+        try {
+          const dims = await getImageDimensions(tryOnModelImage.base64, tryOnModelImage.mimeType);
+          modelAspectRatio = getClosestAspectRatio(dims.width, dims.height);
+        } catch (e) {
+          modelAspectRatio = undefined;
+        }
+      }
       
       const prompt = isPromptMode
         ? buildTryOnPrompt({
@@ -2157,13 +2295,15 @@ const App: React.FC = () => {
             hasStockingImage: !!stockingImg,
             stockingPreset: activePreset,
             removeShoes,
+            useDefaultPose,
             variationIndex: index + 1
           })
         : buildTryOnPrompt({
             mode: 'image',
             hasStockingImage: !!stockingImg,
             stockingPreset: activePreset,
-            removeShoes
+            removeShoes,
+            useDefaultPose
           });
 
       const imageUrl = await generateTryOn(
@@ -2172,7 +2312,7 @@ const App: React.FC = () => {
         clothingImg ? clothingImg.base64 : null,
         clothingImg ? clothingImg.mimeType : null,
         prompt,
-        commonApiConfig,
+        useDefaultPose ? commonApiConfig : { ...commonApiConfig, aspectRatio: modelAspectRatio },
         stockingImg?.base64,
         stockingImg?.mimeType
       );
@@ -4118,6 +4258,46 @@ const App: React.FC = () => {
                                     </div>
                                 </div>
                             )}
+
+                            {/* Step 5: Pose Option */}
+                            <div className="animate-in fade-in slide-in-from-bottom-4 bg-slate-50/50 p-6 rounded-2xl border border-slate-200/80 space-y-4 text-left">
+                                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                    <span className="bg-slate-800 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">{tryOnModelImage ? '5' : '2'}</span>
+                                    姿势设置选项
+                                </h3>
+
+                                <div className="space-y-3">
+                                    <label className={`flex items-start gap-3.5 p-4 rounded-xl border cursor-pointer transition-all ${
+                                        tryOnUseDefaultPose 
+                                            ? 'bg-orange-50/20 border-orange-300 ring-1 ring-orange-200/60' 
+                                            : 'bg-white border-slate-200 hover:border-slate-300'
+                                    }`}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={tryOnUseDefaultPose}
+                                            onChange={(e) => setTryOnUseDefaultPose(e.target.checked)}
+                                            className="w-4 h-4 mt-0.5 rounded text-orange-600 focus:ring-orange-500 cursor-pointer accent-orange-600 shrink-0"
+                                        />
+                                        <div className="flex flex-col min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="text-sm font-semibold text-slate-800">
+                                                    是否使用默认姿势
+                                                </span>
+                                                {tryOnUseDefaultPose ? (
+                                                    <span className="text-[11px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">使用默认姿势</span>
+                                                ) : (
+                                                    <span className="text-[11px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">保持模特原图姿势</span>
+                                                )}
+                                            </div>
+                                            <span className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                                                {tryOnUseDefaultPose 
+                                                    ? "【已勾选】保持原有逻辑：AI 会重新生成自然时尚站姿（对镜自拍捂脸造型与直发），并换上目标服装。" 
+                                                    : "【未勾选】仅将模特图的人物换装，严格保持原图人物的姿势动作、人脸、发型与场景背景不变。"}
+                                            </span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
 
                         {tryOnModelImage && (tryOnClothingMode === 'image' ? tryOnClothingImages.length > 0 : tryOnClothingPrompt.trim().length > 0) && (

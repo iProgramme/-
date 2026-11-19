@@ -602,11 +602,12 @@ export const generateTryOn = async (
     gptApiKey?: string;
     model: string;
     imageSize?: '1K' | '2K' | '4K';
+    aspectRatio?: string;
   },
   stockingImageBase64?: string,
   stockingImageMimeType?: string
 ): Promise<string> => {
-  const { useCustomApi, customBaseUrl, customApiKey, gptApiKey, model, imageSize } = config;
+  const { useCustomApi, customBaseUrl, customApiKey, gptApiKey, model, imageSize, aspectRatio } = config;
   
   if (model === 'gpt-image-2') {
     if (!gptApiKey) {
@@ -655,7 +656,7 @@ export const generateTryOn = async (
 
   const generationConfig: any = {
     imageConfig: {
-      aspectRatio: '9:16'
+      aspectRatio: aspectRatio || '9:16'
     }
   };
   
